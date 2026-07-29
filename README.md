@@ -1,213 +1,276 @@
 # Tensor Holography PyTorch
 
-本项目是基于 PyTorch 实现的 **张量全息术（Tensor Holography）** 完整训练与推理流水线，源自原 TensorFlow 实现的迁移与重构。支持端到端的全息图预测、两阶段训练（主网络 + DDPM 校正）、批量验证、单张图像评估以及 ONNX 导出，便于 TensorRT 部署。
+本项目是 **Tensor Holography** 的 PyTorch 移植实现，能够从 RGB‑D 图像（或 LDI 多层深度图像）生成高质量的计算全息图。  
+训练分为两个阶段：主网络（HoloNet）预训练和 DDPM 精细调整，支持多种双相位编码方法（AA‑DPM / BL‑DPM / Maimone DPM）以及物理孔径滤波，最终可导出 ONNX 模型用于部署加速。
+
+---
 
 ## 主要特性
 
-- **两阶段训练**：
-  - **Stage 1**：训练主网络 `TensorHolographyNet`，使用全息图损失 + 焦栈感知损失 + TV 损失。
-  - **Stage 2**：加载 Stage 1 权重，引入 DDPM 校正网络，先进行恒等预训练，再联合微调；支持深度偏移与填充。
-- **完整光学仿真**：角谱传播、三种双相位编码（AA-DPM / BL-DPM / Maimone DPM）、物理光圈滤波。
-- **评估与部署**：批量验证（SSIM/PSNR）、单张 RGB+深度 图像推理、导出 ONNX 模型。
-- **纯 PyTorch 实现**：所有组件（包括复数运算、传播、变换）均以 PyTorch 编写，可微分且兼容 ONNX/TensorRT。
+- **纯 PyTorch 实现**：无 TensorFlow 依赖，仅使用 `tfrecord` 包读取原始数据。
+- **两阶段训练**  
+  - Stage 1：训练 HoloNet，组合全息损失 + 焦栈损失 + TV 损失。  
+  - Stage 2：冻结 / 联合优化 DDPM 网络，进一步提升图像质量。
+- **完整的光学仿真**：角谱传播、深度偏移、双相位编码、频域孔径滤波。
+- **多种双相位编码**：Anti‑Aliasing DPM、Band‑Limited DPM、原始 Maimone DPM。
+- **便捷的评估与导出**  
+  - 验证集批量评估 SSIM / PSNR。  
+  - 单张 RGB‑D 推理，输出相位图、振幅图。  
+  - 导出 ONNX 模型，供 TensorRT 等推理框架使用。
 
-## 环境与安装
-
-### 依赖库
-
-- Python 3.8+
-- PyTorch >= 1.12
-- NumPy
-- OpenCV-Python
-- TensorBoard (可选)
-- `tfrecord` 库 (用于读取 TFRecord 数据)
-
-### 安装步骤
-
-```bash
-# 克隆仓库
-git clone <repository-url>
-cd tensor-holography-pytorch
-
-# 安装核心依赖（推荐使用虚拟环境）
-pip install torch numpy opencv-python tensorboard tfrecord
-```
-
-## 数据准备
-
-项目使用原 TensorFlow 项目中的 **TFRecord** 格式数据。数据文件应放置在 `data/` 目录下，结构如下：
-
-```
-data/
-├── train_192_v2/
-│   └── train_04.tfrecord       # 训练集（约 3800 样本）
-├── test_192_v2/
-│   └── test_04.tfrecord        # 验证集（约 100 样本）
-└── validate_192_v2/
-    └── validate_04.tfrecord    # 验证集（可与其他共用）
-```
-
-TFRecord 文件中包含以下特征（与 `labels` 参数对应）：
-- `amp_4`：目标振幅（3 通道）
-- `phs_4`：目标相位（3 通道）
-- `img_0`：RGB 图像（3 通道）
-- `depth_0`：深度图（1 通道）
-（多层 LDI 时会包含 `img_1`, `depth_1` 等）
-
-> 如果数据路径或文件名不同，请在训练/验证命令中调整相应参数（暂不支持配置文件，直接修改代码或使用软链接）。
-
-## 使用方法
-
-所有命令均通过主入口 `main.py` 调用，支持子命令：`train_stage1`, `train_stage2`, `validate`, `evaluate`, `export`。
-
-### 1. Stage 1 训练（主网络）
-
-```bash
-python main.py train_stage1 \
-    --model-name full_loss \
-    --dataset-res 192 \
-    --pitch 0.008 \
-    --num-layers 30 \
-    --num-filters-per-layer 24 \
-    --num-epochs 4050 \
-    --batch 2 \
-    --learning-rate 1e-4 \
-    --ckpt-dir ./ckpt_stage1
-```
-
-- `--restore`：从已有 checkpoint 恢复训练（需存在 `ckpt_dir/stage1_latest.pth`）。
-- 默认数据路径为 `data/train_192_v2/train_04.tfrecord` 和 `data/test_192_v2/test_04.tfrecord`。如需更改，可直接修改 `src/train/stage1.py` 中的路径变量。
-
-### 2. Stage 2 训练（DDPM 校正）
-
-Stage 2 需要先完成 Stage 1 并获得模型权重文件。
-
-```bash
-python main.py train_stage2 \
-    --stage1-ckpt ./ckpt_stage1/stage1_latest.pth \
-    --activate-ddpm \
-    --depth-shift 12.0 \
-    --padding 0 \
-    --joint-epochs 200 \
-    --stage2-ckpt-dir ./ckpt_stage2 \
-    --restore-stage1
-```
-
-- 若不使用 DDPM，可添加 `--bypass-ddpm-network`（此时仅训练主网络微调）。
-- `--restore-stage2`：从 `stage2_ckpt_dir` 中恢复之前的 Stage 2 训练（优先恢复联合阶段，否则恢复恒等预训练）。
-- Stage 2 会先进行恒等预训练（默认 50 epoch），再联合训练（默认 200 epoch）。可通过 `--stage2-epochs` 和 `--joint-epochs` 调整。
-
-### 3. 验证（Stage 1 或 Stage 2）
-
-```bash
-# 验证 Stage 1 模型
-python main.py validate --mode stage1 --ckpt-path ./ckpt_stage1/stage1_latest.pth
-
-# 验证 Stage 2 模型（含 DDPM）
-python main.py validate --mode stage2 \
-    --ckpt-path ./ckpt_stage2/stage2_joint_latest.pth \
-    --activate-ddpm \
-    --padding 0 \
-    --depth-shift 12.0
-```
-
-验证脚本会在验证集上计算振幅图的 SSIM 和 PSNR（Stage 1 直接比较输出；Stage 2 经过完整传播、DDPM、编码和滤波后与目标比较）。
-
-### 4. 单张图像评估（推理）
-
-对任意 RGB 和深度图生成全息图相位：
-
-```bash
-python main.py evaluate \
-    --ckpt-path ./ckpt_stage2/stage2_joint_latest.pth \
-    --activate-ddpm \
-    --eval-rgb-path /path/to/rgb.png \
-    --eval-depth-path /path/to/depth.png \
-    --eval-output-path ./output \
-    --eval-res-h 1080 \
-    --eval-res-w 1920 \
-    --padding 0 \
-    --use-maimone-dpm \
-    --adaptive-phs-shift
-```
-
-- 支持多种双相位编码：`--use-maimone-dpm`, `--use-bldpm`（默认 AA-DPM）。
-- 可调节 `--phs-max`, `--gaussian-sigma` 等参数。
-- 输出文件：`amp.png`, `phs.png`, `blue.png` (B通道相位), `green.png`, `red.png`, `amp_filtered.png`。
-
-### 5. 导出 ONNX
-
-将训练好的模型（含 DDPM 可选）导出为 ONNX 格式，用于 TensorRT 部署。
-
-```bash
-python main.py export \
-    --ckpt-path ./ckpt_stage2/stage2_joint_latest.pth \
-    --activate-ddpm \
-    --output ./model.onnx \
-    --res-h 1080 \
-    --res-w 1920 \
-    --pad 0
-```
-
-- 导出时固定 `depth_shift=0`（ONNX 不支持复数传播），仅输出网络预测的振幅和相位。
-- 如需包含 DDPM，务必添加 `--activate-ddpm` 并确保 checkpoint 中含有 DDPM 权重。
+---
 
 ## 项目结构
 
 ```
-tensor-holography-pytorch/
-├── main.py                      # 程序入口，解析子命令并分发
-├── configs/                     # 配置文件（预留，暂未使用）
-├── data/                        # 数据目录（需用户自行放置 TFRecord）
-│   ├── train_192_v2/
-│   ├── test_192_v2/
-│   └── validate_192_v2/
+.
+├── main.py                  # 总入口，命令行参数分发
 ├── src/
 │   ├── data/
-│   │   ├── dataset.py           # PyTorch Dataset，读取 TFRecord
-│   │   └── transforms.py        # interleave/deinterleave
-│   ├── eval/
-│   │   ├── evaluate.py          # 单张图像推理
-│   │   ├── export_onnx.py       # 导出 ONNX
-│   │   └── validate.py          # 批量验证
-│   ├── losses/
-│   │   ├── ddpm_loss.py         # DDPM 相位统计正则
-│   │   ├── focal_stack.py       # 焦栈感知损失
-│   │   └── holo_loss.py         # 振幅-相位损失
+│   │   ├── dataset.py       # TFRecord 数据集读取
+│   │   └── transforms.py    # interleave/deinterleave
 │   ├── models/
-│   │   ├── holonet.py           # 主网络 TensorHolographyNet
-│   │   └── ddpm_net.py          # DDPM 校正网络
+│   │   ├── holonet.py       # 主全息预测网络
+│   │   └── ddpm_net.py      # DDPM 校正网络
 │   ├── optics/
-│   │   ├── aperture.py          # 物理光圈滤波
-│   │   ├── complex_utils.py     # 复数运算、FFT 辅助
-│   │   ├── dpm.py               # 三种双相位编码
-│   │   └── propagation.py       # 角谱传播算子
+│   │   ├── propagation.py   # 角谱 / 菲涅尔传播
+│   │   ├── complex_utils.py # 复数构造、FFT 工具
+│   │   ├── aperture.py      # 孔径滤波
+│   │   └── dpm.py           # 双相位编码
+│   ├── losses/
+│   │   ├── holo_loss.py     # 全息振幅‑相位损失
+│   │   ├── focal_stack.py   # 焦栈感知损失
+│   │   └── ddpm_loss.py     # DDPM 相位正则
 │   ├── train/
-│   │   ├── stage1.py            # Stage 1 训练脚本
-│   │   ├── stage2.py            # Stage 2 训练脚本
-│   │   └── trainer.py           # 训练器基类（预留）
+│   │   ├── stage1.py        # 阶段一训练
+│   │   ├── stage2.py        # 阶段二训练
+│   │   └── trainer.py       # 训练基类
+│   ├── eval/
+│   │   ├── validate.py      # 批量验证
+│   │   ├── evaluate.py      # 单张推理评估
+│   │   └── export_onnx.py   # 导出 ONNX
 │   └── utils/
-│       ├── metrics.py           # SSIM / PSNR
-│       ├── visualizer.py        # 可视化工具（暂空）
-│       └── weight_init.py       # 权重初始化
-└── README.md
+│       ├── metrics.py       # SSIM / PSNR
+│       ├── weight_init.py   # 权重初始化
+│       └── visualizer.py    # （预留）
+├── data/                    # 数据集目录（需自行准备）
+└── model/                   # 模型保存目录
 ```
-
-## 注意事项
-
-- 所有光学仿真（传播、DPM、滤波）均基于 **NCHW** 张量格式。
-- 默认数据分辨率为 192×192（训练），推理时支持任意分辨率（需确保模型结构可适应）。
-- Stage 2 的深度偏移 `depth_shift` 需与训练时保持一致，否则结果不匹配。
-- 导出 ONNX 时仅支持 `depth_shift=0`，因为复数传播无法在 ONNX 中直接表示。
-
-## 引用
-
-如果本代码对您的研究有帮助，请引用原始 TensorFlow 项目以及本 PyTorch 迁移版本（如有相关论文，请补充）。
 
 ---
 
-**License**：本项目基于 [原始 TensorFlow 代码](https://github.com/... ) 迁移，遵循其许可证。请自行确认。
+## 环境配置
 
-## 联系
+- Python 3.8+
+- PyTorch ≥ 1.10（推荐 2.0+）
+- CUDA（可选，但建议使用 GPU）
 
-如有问题或建议，欢迎提交 Issue 或 Pull Request。
+### 安装依赖
+
+```bash
+pip install torch torchvision  # 根据 CUDA 版本选择
+pip install numpy opencv-python tfrecord
+```
+
+`tfrecord` 包用于直接读取 TensorFlow 的 TFRecord 文件，无需安装 TensorFlow。
+
+---
+
+## 数据准备
+
+训练数据需为 TFRecord 格式，每条样本包含以下特征（`float_list`）：
+
+| 特征键      | 形状          | 说明                     |
+|-------------|---------------|--------------------------|
+| `amp_4`     | (3, H, W)     | 目标振幅，范围 [0, √2]  |
+| `phs_4`     | (3, H, W)     | 目标相位，归一化到 [0,1] |
+| `img_0`     | (3, H, W)     | 输入 RGB 图像，[0,255] 或归一化后（代码内会除以 255） |
+| `depth_0`   | (1, H, W)     | 输入深度图，值域 [0,1]   |
+| `img_1`, `depth_1`, … | 同上 | 多层 LDI 时使用       |
+
+推荐目录结构：
+
+```
+data/
+  train_192_v2/
+    train_04.tfrecord
+  test_192_v2/
+    test_04.tfrecord
+  validate_192_v2/
+    validate_04.tfrecord
+```
+
+在训练脚本中，可通过 `--dataset-res`、`--active-max-ldi-layer` 等参数指定分辨率和 LDI 层数，程序会自动拼接路径。
+
+---
+
+## 使用方法
+
+所有功能通过 `main.py` 提供统一入口：
+
+```bash
+python main.py <mode> [options...]
+```
+
+支持的 mode：  
+`train_stage1` | `train_stage2` | `validate` | `evaluate` | `export`
+
+### 1. 训练阶段一（HoloNet）
+
+```bash
+python main.py train_stage1 \
+  --model-name full_loss \
+  --dataset-res 192 \
+  --pitch 0.008 \
+  --num-layers 30 \
+  --num-filters-per-layer 24 \
+  --num-epochs 4050 \
+  --batch 2 \
+  --learning-rate 1e-4 \
+  --num-iter-per-test 1000 \
+  --active-max-ldi-layer 0 \
+  [--restore] [--ckpt-dir ./model/my_stage1]
+```
+
+**关键参数：**
+
+- `--dataset-res`：数据集分辨率（高宽相同，如 192）。
+- `--pitch`：像素间距（mm）。
+- `--num-layers` / `--num-filters-per-layer`：网络深度与宽度。
+- `--batch`：批次大小。
+- `--active-max-ldi-layer`：LDI 层数，0 表示单层 RGB‑D，>0 表示多层。
+- `--restore`：若指定，从 `ckpt-dir` 下的 `stage1_latest.pth` 恢复训练。
+- `--ckpt-dir`：模型保存目录，默认自动生成。
+
+### 2. 训练阶段二（DDPM 精细调整）
+
+```bash
+python main.py train_stage2 \
+  --model-name full_loss \
+  --dataset-res 192 \
+  --pitch 0.008 \
+  --num-layers 30 \
+  --num-filters-per-layer 24 \
+  --batch 2 \
+  --learning-rate 1e-4 \
+  --stage1-ckpt ./model/ckpt_full_loss_.../stage1_latest.pth \
+  --stage2-epochs 50 \
+  --joint-epochs 200 \
+  --padding 0 \
+  --depth-shift 12.0 \
+  [--activate-ddpm] [--bypass-ddpm-network] \
+  [--restore-stage1] [--restore-stage2] [--stage2-ckpt-dir ./model/my_stage2]
+```
+
+**关键参数：**
+
+- `--stage1-ckpt`：阶段一的 checkpoint 路径（必须）。
+- `--padding`：边缘填充大小，用于模拟衍射超出区域。
+- `--depth-shift`：深度偏移距离（mm）。
+- `--stage2-epochs`：身份预训练轮数（仅优化 DDPM）。
+- `--joint-epochs`：联合训练轮数（同时优化 HoloNet 和 DDPM）。
+- `--activate-ddpm`：启用 DDPM 网络；不启用则等效于 `--bypass-ddpm-network`。
+- `--restore-stage2`：从 `stage2_identity_latest.pth` 或 `stage2_joint_latest.pth` 恢复训练。
+
+### 3. 验证
+
+```bash
+# 验证 stage1 模型
+python main.py validate --mode stage1 --ckpt-path ./model/.../stage1_latest.pth
+
+# 验证 stage2 模型（可选 DDPM）
+python main.py validate --mode stage2 \
+  --ckpt-path ./model/.../stage2_joint_latest.pth \
+  --padding 0 --depth-shift 12.0 \
+  [--activate-ddpm] [--bypass-ddpm-network] [--ddpm-ckpt-path ...]
+```
+
+程序会在验证 TFRecord 上计算振幅图的 SSIM / PSNR 并输出统计信息。
+
+### 4. 单张图像评估
+
+```bash
+python main.py evaluate \
+  --ckpt-path ./model/stage2_joint_latest.pth \
+  --eval-rgb-path ./test_img/input.png \
+  --eval-depth-path ./test_img/depth.png \
+  --eval-output-path ./results/ \
+  --eval-res-h 1080 --eval-res-w 1920 \
+  --padding 0 --eval-depth-shift 0.0 \
+  --use-aadpm  # 或 --use-maimone-dpm / --use-bldpm
+```
+
+**关键参数：**
+
+- `--eval-rgb-path` / `--eval-depth-path`：输入 RGB 和深度图路径，深度图自动以灰度读取。
+- `--eval-output-path`：输出目录，会生成 `amp.png`、`phs.png`、各通道相位图等。
+- `--eval-depth-shift`：推理时的额外深度偏移。
+- `--use-maimone-dpm` / `--use-bldpm`：选择双相位编码方法；默认使用 AA‑DPM。
+- `--phs-max`：相位包裹上限（默认 `2.0`，即 2π）。
+- `--gaussian-sigma`：AA‑DPM 的模糊程度。
+
+### 5. 导出 ONNX
+
+```bash
+python main.py export \
+  --ckpt-path ./model/stage2_joint_latest.pth \
+  --output model.onnx \
+  --res-h 1080 --res-w 1920 --pad 0 \
+  [--activate-ddpm] [--ddpm-ckpt-path ...]
+```
+
+导出的 ONNX 包含两个输出 `amp_out` 和 `phs_out`，batch 维度动态。  
+**注意**：导出时不包含复数深度偏移运算，需在后续的推理管线中补充。
+
+---
+
+## 主要参数速查表
+
+| 参数                         | 类型    | 默认值      | 说明                                 |
+|------------------------------|---------|-------------|--------------------------------------|
+| `--model-name`               | str     | `full_loss` | 模型名称，用于自动生成保存目录         |
+| `--dataset-res`              | int     | 192         | 数据集分辨率（高宽相等）              |
+| `--pitch`                    | float   | 0.008       | 像素尺寸（mm）                        |
+| `--num-layers`               | int     | 30          | HoloNet 层数                          |
+| `--num-filters-per-layer`    | int     | 24          | 每层滤波器数                          |
+| `--batch`                    | int     | 2           | 批次大小                              |
+| `--learning-rate`            | float   | 1e-4        | 学习率                                |
+| `--active-max-ldi-layer`     | int     | 0           | 最大 LDI 层索引（0 为单层 RGB‑D）      |
+| `--padding`                  | int     | 0           | 边缘填充                              |
+| `--depth-shift`              | float   | 12.0        | 深度偏移（mm）                        |
+| `--activate-ddpm`            | flag    | False       | 启用 DDPM 网络                        |
+| `--bypass-ddpm-network`      | flag    | False       | 旁路 DDPM 网络（即使存在也不使用）    |
+| `--num-iter-per-test`        | int     | 1000        | 训练期间验证间隔（step 数）           |
+| `--restore` / `--restore-stage1` / `--restore-stage2` | flag | False | 从检查点恢复训练                |
+| `--ckpt-path` / `--stage1-ckpt` 等 | str | required | 模型权重路径                         |
+
+---
+
+## 常见问题
+
+**Q：数据读取时提示 `No module named 'tfrecord'`？**  
+A：请执行 `pip install tfrecord`。该包不依赖 TensorFlow。
+
+**Q：ONNX 模型能在 TensorRT 中使用吗？**  
+A：可以。导出时已选用 opset 14，建议使用 `trtexec` 或 ONNX Runtime 测试。注意深度偏移等光学后处理仍需在外部实现。
+
+**Q：训练时 GPU 内存不足？**  
+A：减小 `--batch`，或降低 `--dataset-res`（如 128）。也可尝试减小 `--num-filters-per-layer`。
+
+---
+
+## 引用
+
+本实现参考了以下工作：
+
+- Shi, L., Li, B., Kim, C., Kellnhofer, P., & Matusik, W. (2021).  
+  **Towards real-time photorealistic 3D holography with deep neural networks**. *Nature*.  
+- Sui, X., He, Z., Chu, D., & Cao, L. (2021). **Band-limited double-phase method for holographic displays**.  
+- Maimone, A., Georgiou, A., & Kollin, J. S. (2017). **Holographic near-eye displays for virtual and augmented reality**.
+
+---
+
+## 许可证
+
+本项目代码基于原 TensorFlow 实现移植，仅供研究使用。  
+数据及模型权重请遵循原始仓库的许可协议。
