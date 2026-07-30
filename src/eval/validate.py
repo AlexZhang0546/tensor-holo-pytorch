@@ -2,26 +2,29 @@
 """
 批量验证脚本：对应原 TensorFlow 项目中的 validate_stage_1 和 validate_stage_2 方法。
 加载指定阶段的模型权重，在验证集上计算振幅图的 SSIM/PSNR，并输出统计结果。
+
+第 6 步修改：网络直接输出复数场，去除 compl_val 构造步骤，直接传递复数张量。
 """
 
 import os
 import argparse
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import sys
 
 # 添加项目根目录到路径，确保 src 模块可导入
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.models.holonet import TensorHolographyNet
+from src.models.holonet import TensorHolographyNet   # 注意：此处仍用实数网络名，但实际使用时网络已改为输出复数
 from src.models.ddpm_net import DDPMNet
 from src.data.dataset import create_dataloader
 from src.optics.propagation import propagator_factory
-from src.optics.complex_utils import compl_val, compl_exp
+from src.optics.complex_utils import compl_exp        # 仅保留 compl_exp，去掉了 compl_val
 from src.optics.dpm import aadpm
 from src.optics.aperture import filter_phs_only
-from src.utils.metrics import compute_ssim, compute_psnr  # 如果单独提取，也可直接调用内部实现
+from src.utils.metrics import compute_ssim, compute_psnr
 
 
 # ---- 辅助函数：构建传播算子（无 padding / 有 padding） ----
@@ -65,7 +68,7 @@ def load_model_weights(model, checkpoint_path, device):
 
 def validate_stage1(holonet, val_loader, hologram_params, device):
     """
-    Stage1 验证：只使用主网络输出，比较振幅图的 SSIM 和 PSNR。
+    Stage1 验证：只使用主网络输出（复数场），比较振幅图的 SSIM 和 PSNR。
     返回平均 SSIM、PSNR 以及各自的标准差和极值。
     """
     holonet.eval()
@@ -76,9 +79,12 @@ def validate_stage1(holonet, val_loader, hologram_params, device):
         for batch in val_loader:
             rgbd = batch['rgbd'].to(device)         # (B, C, H, W)
             amp_gt = batch['amp_4'].to(device)      # (B, 3, H, W)
-            phs_gt = batch['phs_4'].to(device)
+            phs_gt = batch['phs_4'].to(device)      # 暂未使用，但保留以兼容
 
-            amp_out, phs_out = holonet(rgbd)        # 预测振幅/相位
+            # 网络直接输出复数场 (B, 3, H, W)
+            holo_out = holonet(rgbd)
+            # 提取振幅用于指标计算
+            amp_out = torch.abs(holo_out)
 
             # 计算每张图的 SSIM/PSNR（data_range 与原 TF 一致，使用 1.0）
             for i in range(amp_out.size(0)):
@@ -103,7 +109,7 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
     """
     Stage2 验证：执行完整的 DDPM 流程，包括 padding、深度偏移、DDPM 校正、
     双相位编码（AA-DPM）和物理孔径滤波，最终比较滤波后振幅与原始目标振幅的 SSIM/PSNR。
-    若 ddpm_net 为 None，则 bypass DDPM，直接使用偏移后的场进行编码和滤波。
+    网络直接输出复数场，不再使用 compl_val 构造。
     """
     holonet.eval()
     if ddpm_net is not None:
@@ -130,28 +136,26 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
             amp_gt = batch['amp_4'].to(device)
             phs_gt = batch['phs_4'].to(device)
 
-            # 目标全息图也需要 padding（与原代码一致）
-            amp_gt_padded = torch.nn.functional.pad(
-                amp_gt, (pad, pad, pad, pad), mode='constant', value=0.0)
-            phs_gt_padded = torch.nn.functional.pad(
-                phs_gt, (pad, pad, pad, pad), mode='constant', value=0.5)
+            # 目标全息图 padding（振幅填0，相位填0.5对应复数零）
+            amp_gt_padded = F.pad(amp_gt, (pad, pad, pad, pad), mode='constant', value=0.0)
+            phs_gt_padded = F.pad(phs_gt, (pad, pad, pad, pad), mode='constant', value=0.5)
 
-            # 1. 主网络输出
-            amp_mid, phs_mid = holonet(rgbd)
+            # 1. 主网络输出复数场 (B, 3, H, W)
+            holo_mid = holonet(rgbd)
 
-            # 2. padding 并深度偏移
-            amp_mid_padded = torch.nn.functional.pad(
-                amp_mid, (pad, pad, pad, pad), mode='constant', value=0.0)
-            phs_mid_padded = torch.nn.functional.pad(
-                phs_mid, (pad, pad, pad, pad), mode='constant', value=0.5)
+            # 2. padding（复数直接零填充）
+            if pad > 0:
+                holo_mid = F.pad(holo_mid, (pad, pad, pad, pad), mode='constant', value=0.0)
 
-            holo_mid = compl_val(amp_mid_padded, (phs_mid_padded - 0.5) * 2.0 * np.pi)
+            # 3. 深度偏移（复数运算，无需构造）
             holo_shifted = propagator_pad(holo_mid, depth_shift) * compl_exp(
                 -2 * np.pi * depth_shift / wavelengths)
+
+            # 4. 从偏移后的复数场提取振幅和相位，用于 DDPM 网络（DDPM 仍为实数输入）
             amp_shifted = torch.abs(holo_shifted)
             phs_shifted = torch.angle(holo_shifted) / (2.0 * np.pi) + 0.5
 
-            # 3. DDPM 校正（若存在）
+            # 5. DDPM 校正（若存在）
             if ddpm_net is not None:
                 amp_phs = torch.cat([amp_shifted, phs_shifted], dim=1)
                 amp_altered, phs_altered = ddpm_net(amp_phs)
@@ -159,8 +163,10 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
                 # bypass：直接使用偏移后的结果
                 amp_altered, phs_altered = amp_shifted, phs_shifted
 
-            # 4. 双相位编码 (AA-DPM) —— 与原 stage2 验证流程一致
-            holo_altered = compl_val(amp_altered, (phs_altered - 0.5) * 2.0 * np.pi)
+            # 6. 构造 DDPM 输出复数场（此处仍需组合，因 DDPM 输出为实数）
+            holo_altered = torch.polar(amp_altered, (phs_altered - 0.5) * 2.0 * np.pi)
+
+            # 7. 双相位编码 (AA-DPM) —— 直接传入复数场
             phs_only, amp_max = aadpm(
                 holo_altered,
                 propagator=propagator_pad,
@@ -179,7 +185,7 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
                 wavelength=wavelengths_np
             )
 
-            # 5. 物理孔径滤波，并传回原始深度（取消偏移）
+            # 8. 物理孔径滤波，并传回原始深度（取消偏移）
             amp_final, _ = filter_phs_only(
                 phs_only,
                 unnormalize_input=False,
@@ -196,7 +202,7 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
                 wavelength=wavelengths_np
             )
 
-            # 6. 与目标振幅（已 padding）比较 SSIM/PSNR
+            # 9. 与目标振幅（已 padding）比较 SSIM/PSNR
             for i in range(amp_final.size(0)):
                 ssim_val = compute_ssim(amp_final[i], amp_gt_padded[i], data_range=1.0)
                 psnr_val = compute_psnr(amp_final[i], amp_gt_padded[i], data_range=1.0)
@@ -263,7 +269,7 @@ def main():
         "num_hist_bins": 200
     }
 
-    # 构建主网络
+    # 构建主网络（注意：若已改为复数网络 ComplexHoloNet，需替换类名；此处暂用原名，实际应同步更改）
     holonet = TensorHolographyNet(
         input_dim=4,                 # 单层 LDI
         output_dim=6,
