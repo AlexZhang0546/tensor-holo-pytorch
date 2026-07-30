@@ -240,7 +240,7 @@ def main():
 
     # 复数 DDPM 网络
     ddpm_net = None
-    if args.mode == 'stage2' and args.activate_ddpm and not args.bypass_ddpm_network:
+    if args.val_mode == 'stage2' and args.activate_ddpm and not args.bypass_ddpm_network:
         ddpm_net = ComplexDDPMNet(
             input_dim=3, output_dim=3,          # 复数通道为 3（RGB）
             num_layers=8, num_filters_per_layer=8,
