@@ -2,7 +2,7 @@
 """
 复值神经网络基础模块：
   - ComplexConv2d: 复数二维卷积（两个实卷积）
-  - ComplexBatchNorm2d: 完整复数批归一化（白化+去相关）
+  - ComplexBatchNorm2d: 完整复数批归一化（白化+去相关，已修复广播错误）
   - SimpleComplexBatchNorm2d: 简化版复数批归一化（分别对实/虚部 BN，仅供对照）
   - ComplexReLU: modReLU 激活函数
   - complex_xavier_uniform_: 复数 Xavier 初始化
@@ -29,7 +29,6 @@ class ComplexConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
                  padding=0, dilation=1, groups=1, bias=True):
         super().__init__()
-        # 两个独立的实卷积
         self.conv_real = nn.Conv2d(in_channels, out_channels, kernel_size,
                                    stride, padding, dilation, groups, bias)
         self.conv_imag = nn.Conv2d(in_channels, out_channels, kernel_size,
@@ -60,7 +59,9 @@ class ComplexBatchNorm2d(nn.Module):
     复数批归一化（白化 + 去相关）。
     实现参考：Deep Complex Networks (Trabelsi et al., ICLR 2018)。
 
-    修复：正确拆分均值/协方差分量，避免因维度索引错误导致的广播失败。
+    修复内容：
+        - 修复均值/协方差分量维度索引错误；
+        - 将统计量 reshape 为 (1, C, 1) 以正确广播到 (B, C, N) 的张量。
     """
     def __init__(self, num_features, eps=1e-5, momentum=0.1,
                  affine=True, track_running_stats=True):
@@ -94,18 +95,19 @@ class ComplexBatchNorm2d(nn.Module):
     def _normalize_complex(self, x_real, x_imag,
                            mean_r, mean_i, V_rr, V_ii, V_ri):
         """
-        白化步骤，各分量已广播为 (1, C, 1, 1) 或相应可广播形状。
+        白化步骤，所有分量已正确广播（形状 (1, C, 1) 或可广播）。
         """
-        # 减均值
+        # 减去均值
         x_real = x_real - mean_r
         x_imag = x_imag - mean_i
 
-        # 逆平方根矩阵元素计算（同前）
+        # 协方差矩阵的逆平方根元素计算
         det = V_rr * V_ii - V_ri * V_ri
         s = torch.sqrt(det) + self.eps
         trace = V_rr + V_ii
         t = torch.sqrt(trace + 2.0 * s) * s
 
+        # 白化
         out_real = ((V_ii + s) * x_real - V_ri * x_imag) / t
         out_imag = (-V_ri * x_real + (V_rr + s) * x_imag) / t
         return out_real, out_imag
@@ -123,8 +125,9 @@ class ComplexBatchNorm2d(nn.Module):
             x_real_flat = x_real.permute(0, 2, 3, 1).reshape(N, C)
             x_imag_flat = x_imag.permute(0, 2, 3, 1).reshape(N, C)
 
+            # 计算统计量
             mean_r = x_real_flat.mean(dim=0)   # (C,)
-            mean_i = x_imag_flat.mean(dim=0)   # (C,)
+            mean_i = x_imag_flat.mean(dim=0)
             mean = torch.stack([mean_r, mean_i], dim=-1)   # (C, 2)
 
             x_real_centered = x_real_flat - mean_r
@@ -150,21 +153,16 @@ class ComplexBatchNorm2d(nn.Module):
             V_ii = cov[:, 1]
             V_ri = cov[:, 2]
 
-        # 训练模式下也需要拆分（均值和协方差在当前 batch 中是分开的张量）
-        if self.training:
-            # 已经分别有 mean_r, mean_i, V_rr, V_ii, V_ri
-            pass
-
-        # 将扁平化的输入视为 (B, C, N_spatial)
+        # 将输入展平为 (B, C, N) 以进行逐点白化
         x_real_flat = x_real.view(B, C, -1)
         x_imag_flat = x_imag.view(B, C, -1)
 
-        # 将各统计量重塑为 (1, C, 1, 1)，便于广播
-        mean_r = mean_r.view(1, C, 1, 1)
-        mean_i = mean_i.view(1, C, 1, 1)
-        V_rr = V_rr.view(1, C, 1, 1)
-        V_ii = V_ii.view(1, C, 1, 1)
-        V_ri = V_ri.view(1, C, 1, 1)
+        # 统计量重塑为 (1, C, 1) —— 与 (B, C, N) 兼容广播
+        mean_r = mean_r.view(1, C, 1)
+        mean_i = mean_i.view(1, C, 1)
+        V_rr = V_rr.view(1, C, 1)
+        V_ii = V_ii.view(1, C, 1)
+        V_ri = V_ri.view(1, C, 1)
 
         # 白化
         out_real, out_imag = self._normalize_complex(
@@ -172,7 +170,7 @@ class ComplexBatchNorm2d(nn.Module):
             mean_r, mean_i, V_rr, V_ii, V_ri
         )
 
-        # 仿射变换
+        # 仿射变换（参数也重塑为 (1, C, 1)）
         if self.affine:
             gamma_rr = self.weight_rr.view(1, C, 1)
             gamma_ii = self.weight_ii.view(1, C, 1)
@@ -189,6 +187,21 @@ class ComplexBatchNorm2d(nn.Module):
         y_real = y_real.view(B, C, H, W)
         y_imag = y_imag.view(B, C, H, W)
         return torch.complex(y_real, y_imag)
+
+
+class SimpleComplexBatchNorm2d(nn.Module):
+    """
+    简化版复数批归一化（仅供对照实验，不推荐用于最终模型）。
+    分别对实部和虚部执行独立的 2D BatchNorm，忽略了二者的相关性。
+    """
+    def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True,
+                 track_running_stats=True):
+        super().__init__()
+        self.bn_real = nn.BatchNorm2d(num_features, eps, momentum, affine, track_running_stats)
+        self.bn_imag = nn.BatchNorm2d(num_features, eps, momentum, affine, track_running_stats)
+
+    def forward(self, x):
+        return torch.complex(self.bn_real(x.real), self.bn_imag(x.imag))
 
 
 class ComplexReLU(nn.Module):
