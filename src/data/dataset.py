@@ -3,11 +3,13 @@
 PyTorch 数据集类，用于直接读取原始 TFRecord 文件。
 保持与原 TFRecordExtractorforTH._extract_fn 完全一致的解析逻辑，
 并返回模型可直接使用的 RGBD（LDI）输入及目标全息图（amp_4, phs_4）。
+同时提供复数形式的目标全息图 target_complex。
 
 依赖：
     pip install tfrecord
 """
 
+import math
 import torch
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
@@ -26,7 +28,7 @@ class THDataset(Dataset):
         - 直接读取 .tfrecord 文件，不修改原始数据；
         - 按 labels 列表解析特征（与原 TFRecordExtractorforTH._extract_fn 等价）；
         - 支持多层 LDI 输入（通过 active_max_ldi_layer 控制）；
-        - 返回 dict 包含 'rgbd' (拼接后的 LDI 输入)、'amp_4'、'phs_4'，
+        - 返回 dict 包含 'rgbd' (拼接后的 LDI 输入)、'amp_4'、'phs_4' 和 'target_complex'，
           与原始 _preprocess_input 逻辑一致。
     """
 
@@ -110,6 +112,7 @@ class THDataset(Dataset):
             'rgbd':    Tensor (input_dim, H, W) - LDI 拼接结果，与原始 _preprocess_input 中 rgbd 一致
             'amp_4':   Tensor (3, H, W) - 目标振幅
             'phs_4':   Tensor (3, H, W) - 目标相位
+            'target_complex': Tensor (3, H, W) - 复数目标全息图（complex64），由振幅和相位构造
         可根据需要扩展其他字段。
         """
         sample = self.samples[idx]
@@ -131,10 +134,21 @@ class THDataset(Dataset):
         amp_4 = sample["amp_4"]   # (3, H, W)
         phs_4 = sample["phs_4"]   # (3, H, W)
 
+        # 转换为 torch 张量
+        amp = torch.from_numpy(amp_4).float()
+        phs = torch.from_numpy(phs_4).float()
+
+        # 将归一化相位映射到 [-π, π]
+        phs_scaled = (phs - 0.5) * 2 * math.pi
+
+        # 构造复数目标
+        target_complex = torch.polar(amp, phs_scaled)  # 直接得到复数张量
+
         return {
             "rgbd": torch.from_numpy(rgbd).float(),
-            "amp_4": torch.from_numpy(amp_4).float(),
-            "phs_4": torch.from_numpy(phs_4).float(),
+            "amp_4": amp,
+            "phs_4": phs,
+            "target_complex": target_complex,
         }
 
 
