@@ -278,11 +278,10 @@ def main():
         drop_last=False
     )
 
-    if args.mode == 'stage1':
+    if args.val_mode == 'stage1':
         validate_stage1(holonet, val_loader, hologram_params, device)
     else:
         validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_params, device)
-
 
 if __name__ == '__main__':
     main()
