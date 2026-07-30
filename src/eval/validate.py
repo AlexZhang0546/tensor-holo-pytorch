@@ -1,9 +1,8 @@
 # src/eval/validate.py
 """
-批量验证脚本：对应原 TensorFlow 项目中的 validate_stage_1 和 validate_stage_2 方法。
-加载指定阶段的模型权重，在验证集上计算振幅图的 SSIM/PSNR，并输出统计结果。
-
-第 6 步修改：网络直接输出复数场，去除 compl_val 构造步骤，直接传递复数张量。
+批量验证脚本（复数网络适配版）。
+使用 ComplexHoloNet 直接输出复数场，不再通过 compl_val 构造。
+DDPM 校正部分仍采用实数输入/输出，与现有 DDPMNet 兼容。
 """
 
 import os
@@ -11,25 +10,22 @@ import argparse
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
 import sys
 
-# 添加项目根目录到路径，确保 src 模块可导入
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.models.holonet import TensorHolographyNet   # 注意：此处仍用实数网络名，但实际使用时网络已改为输出复数
+from src.models.holonet import ComplexHoloNet
 from src.models.ddpm_net import DDPMNet
 from src.data.dataset import create_dataloader
 from src.optics.propagation import propagator_factory
-from src.optics.complex_utils import compl_exp        # 仅保留 compl_exp，去掉了 compl_val
+from src.optics.complex_utils import compl_exp
 from src.optics.dpm import aadpm
 from src.optics.aperture import filter_phs_only
 from src.utils.metrics import compute_ssim, compute_psnr
 
 
-# ---- 辅助函数：构建传播算子（无 padding / 有 padding） ----
+# ---- 传播算子构建 ----
 def build_propagator(res_h, res_w, pitch, wavelengths, double_pad=True):
-    """构建角谱传播算子，用于无 padding 的验证 (stage1)"""
     return propagator_factory(
         input_shape=(res_h, res_w),
         pitch=pitch,
@@ -39,7 +35,6 @@ def build_propagator(res_h, res_w, pitch, wavelengths, double_pad=True):
     )
 
 def build_propagator_padded(res_h, res_w, pitch, wavelengths, pad, double_pad=True):
-    """构建带 padding 的角谱传播算子，用于 stage2 验证"""
     return propagator_factory(
         input_shape=(res_h + 2 * pad, res_w + 2 * pad),
         pitch=pitch,
@@ -51,25 +46,22 @@ def build_propagator_padded(res_h, res_w, pitch, wavelengths, pad, double_pad=Tr
 
 # ---- 加载模型权重 ----
 def load_model_weights(model, checkpoint_path, device):
-    """从指定 .pth 文件加载模型权重（支持主网络和 DDPM 网络）"""
     if not os.path.isfile(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
-    # 兼容 stage1 和 stage2 的保存格式
+    # 兼容多种保存格式
     if 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
     elif 'holonet_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['holonet_state_dict'])
     else:
-        # 直接尝试加载全部 key（可能直接是 state_dict）
         model.load_state_dict(checkpoint)
     print(f"Model weights loaded from {checkpoint_path}")
 
 
 def validate_stage1(holonet, val_loader, hologram_params, device):
     """
-    Stage1 验证：只使用主网络输出（复数场），比较振幅图的 SSIM 和 PSNR。
-    返回平均 SSIM、PSNR 以及各自的标准差和极值。
+    Stage1 验证：主网络输出复数场，直接比较振幅。
     """
     holonet.eval()
     ssim_list = []
@@ -77,18 +69,14 @@ def validate_stage1(holonet, val_loader, hologram_params, device):
 
     with torch.no_grad():
         for batch in val_loader:
-            rgbd = batch['rgbd'].to(device)         # (B, C, H, W)
-            amp_gt = batch['amp_4'].to(device)      # (B, 3, H, W)
-            phs_gt = batch['phs_4'].to(device)      # 暂未使用，但保留以兼容
+            rgbd = batch['rgbd'].to(device)           # (B, C, H, W)
+            amp_gt = batch['amp_4'].to(device)        # 目标振幅
 
-            # 网络直接输出复数场 (B, 3, H, W)
+            # 复数网络直接输出光场 (B, 3, H, W)
             holo_out = holonet(rgbd)
-            # 提取振幅用于指标计算
-            amp_out = torch.abs(holo_out)
+            amp_out = holo_out.abs()                  # 振幅
 
-            # 计算每张图的 SSIM/PSNR（data_range 与原 TF 一致，使用 1.0）
             for i in range(amp_out.size(0)):
-                # 注意：原代码振幅范围 [0, sqrt(2)]，但 SSIM 使用了 max_val=1.0，此处保持一致
                 ssim_val = compute_ssim(amp_out[i], amp_gt[i], data_range=1.0)
                 psnr_val = compute_psnr(amp_out[i], amp_gt[i], data_range=1.0)
                 ssim_list.append(ssim_val.item())
@@ -107,25 +95,20 @@ def validate_stage1(holonet, val_loader, hologram_params, device):
 
 def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_params, device):
     """
-    Stage2 验证：执行完整的 DDPM 流程，包括 padding、深度偏移、DDPM 校正、
-    双相位编码（AA-DPM）和物理孔径滤波，最终比较滤波后振幅与原始目标振幅的 SSIM/PSNR。
-    网络直接输出复数场，不再使用 compl_val 构造。
+    Stage2 验证：复数光场 -> 传播/偏移 -> DDPM（实数） -> DPM -> 孔径滤波。
     """
     holonet.eval()
     if ddpm_net is not None:
         ddpm_net.eval()
 
-    # 参数提取
     pad = training_params.get('padding', 0)
     depth_shift = training_params.get('depth_shift', 0.0)
     res_h, res_w = hologram_params['res_h'], hologram_params['res_w']
     wavelengths_np = hologram_params['wavelengths']
     wavelengths = torch.tensor(wavelengths_np, device=device).view(1, -1, 1, 1)
 
-    # 构建带 padding 的传播算子
     propagator_pad = build_propagator_padded(res_h, res_w, hologram_params['pitch'],
-                                             wavelengths_np, pad)
-    propagator_pad = propagator_pad.to(device)
+                                             wavelengths_np, pad).to(device)
 
     ssim_list = []
     psnr_list = []
@@ -136,47 +119,45 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
             amp_gt = batch['amp_4'].to(device)
             phs_gt = batch['phs_4'].to(device)
 
-            # 目标全息图 padding（振幅填0，相位填0.5对应复数零）
+            # 目标振幅 padding（用于比较）
             amp_gt_padded = F.pad(amp_gt, (pad, pad, pad, pad), mode='constant', value=0.0)
-            phs_gt_padded = F.pad(phs_gt, (pad, pad, pad, pad), mode='constant', value=0.5)
 
             # 1. 主网络输出复数场 (B, 3, H, W)
             holo_mid = holonet(rgbd)
 
-            # 2. padding（复数直接零填充）
+            # 2. padding（复数直接填0）
             if pad > 0:
                 holo_mid = F.pad(holo_mid, (pad, pad, pad, pad), mode='constant', value=0.0)
 
-            # 3. 深度偏移（复数运算，无需构造）
+            # 3. 深度偏移（复数运算）
             holo_shifted = propagator_pad(holo_mid, depth_shift) * compl_exp(
                 -2 * np.pi * depth_shift / wavelengths)
 
-            # 4. 从偏移后的复数场提取振幅和相位，用于 DDPM 网络（DDPM 仍为实数输入）
-            amp_shifted = torch.abs(holo_shifted)
-            phs_shifted = torch.angle(holo_shifted) / (2.0 * np.pi) + 0.5
+            # 4. 提取振幅/相位供 DDPM（实数网络）
+            amp_shifted = holo_shifted.abs()
+            phs_shifted = holo_shifted.angle() / (2.0 * np.pi) + 0.5
 
-            # 5. DDPM 校正（若存在）
+            # 5. DDPM 校正
             if ddpm_net is not None:
                 amp_phs = torch.cat([amp_shifted, phs_shifted], dim=1)
                 amp_altered, phs_altered = ddpm_net(amp_phs)
             else:
-                # bypass：直接使用偏移后的结果
                 amp_altered, phs_altered = amp_shifted, phs_shifted
 
-            # 6. 构造 DDPM 输出复数场（此处仍需组合，因 DDPM 输出为实数）
+            # 6. 从实数振幅/相位构造复数场，用于 DPM 和孔径滤波
             holo_altered = torch.polar(amp_altered, (phs_altered - 0.5) * 2.0 * np.pi)
 
-            # 7. 双相位编码 (AA-DPM) —— 直接传入复数场
+            # 7. 双相位编码 (AA-DPM)
             phs_only, amp_max = aadpm(
                 holo_altered,
                 propagator=propagator_pad,
-                depth_shift=0.0,            # 已在目标平面
+                depth_shift=0.0,
                 adaptive_phs_shift=False,
                 batch=rgbd.size(0),
                 num_channels=3,
                 res_h=holo_altered.shape[2],
                 res_w=holo_altered.shape[3],
-                sigma=0.0,                  # 与原代码一致，sigma=0
+                sigma=0.0,
                 kernel_width=3,
                 phs_max=None,
                 amp_max=None,
@@ -185,7 +166,7 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
                 wavelength=wavelengths_np
             )
 
-            # 8. 物理孔径滤波，并传回原始深度（取消偏移）
+            # 8. 物理孔径滤波并反向传播
             amp_final, _ = filter_phs_only(
                 phs_only,
                 unnormalize_input=False,
@@ -202,7 +183,7 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
                 wavelength=wavelengths_np
             )
 
-            # 9. 与目标振幅（已 padding）比较 SSIM/PSNR
+            # 9. 与目标振幅比较
             for i in range(amp_final.size(0)):
                 ssim_val = compute_ssim(amp_final[i], amp_gt_padded[i], data_range=1.0)
                 psnr_val = compute_psnr(amp_final[i], amp_gt_padded[i], data_range=1.0)
@@ -221,34 +202,25 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Validate trained Holonet / DDPM model')
-    parser.add_argument('--mode', type=str, required=True, choices=['stage1', 'stage2'],
-                        help='Validation stage')
-    parser.add_argument('--model-name', default='full_loss', type=str, help='Model name')
-    parser.add_argument('--dataset-res', default=192, type=int, help='Dataset resolution')
-    parser.add_argument('--pitch', default=0.008, type=float, help='Pixel pitch in mm')
-    parser.add_argument('--num-layers', default=30, type=int, help='Number of layers')
-    parser.add_argument('--num-filters-per-layer', default=24, type=int,
-                        help='Number of filters per layer')
-    parser.add_argument('--batch', default=2, type=int, help='Batch size')
-    parser.add_argument('--padding', default=0, type=int, help='Padding for stage2')
-    parser.add_argument('--depth-shift', default=12.0, type=float, help='Depth shift for stage2')
-    parser.add_argument('--activate-ddpm', action='store_true',
-                        help='Use DDPM network in stage2')
-    parser.add_argument('--bypass-ddpm-network', action='store_true',
-                        help='Bypass DDPM network in stage2 (only main net)')
-    parser.add_argument('--ckpt-path', type=str, required=True,
-                        help='Path to the checkpoint file (.pth)')
-    # 可选：DDPM 网络单独的 checkpoint（若不与主网络保存在一起）
-    parser.add_argument('--ddpm-ckpt-path', type=str, default=None,
-                        help='Separate DDPM checkpoint (only needed if not in main ckpt)')
+    parser = argparse.ArgumentParser(description='Validate Complex Holonet / DDPM model')
+    parser.add_argument('--mode', type=str, required=True, choices=['stage1', 'stage2'])
+    parser.add_argument('--model-name', default='full_loss', type=str)
+    parser.add_argument('--dataset-res', default=192, type=int)
+    parser.add_argument('--pitch', default=0.008, type=float)
+    parser.add_argument('--num-layers', default=30, type=int)
+    parser.add_argument('--num-filters-per-layer', default=24, type=int)
+    parser.add_argument('--batch', default=2, type=int)
+    parser.add_argument('--padding', default=0, type=int)
+    parser.add_argument('--depth-shift', default=12.0, type=float)
+    parser.add_argument('--activate-ddpm', action='store_true')
+    parser.add_argument('--bypass-ddpm-network', action='store_true')
+    parser.add_argument('--ckpt-path', type=str, required=True)
+    parser.add_argument('--ddpm-ckpt-path', type=str, default=None)
     args = parser.parse_args()
 
-    # 设备
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # 参数准备
     hologram_params = {
         "wavelengths": np.array([0.000450, 0.000520, 0.000638]),
         "pitch": args.pitch,
@@ -263,16 +235,11 @@ def main():
         "batch": args.batch,
         "padding": args.padding,
         "depth_shift": args.depth_shift,
-        "num_top_depth_for_img_loss": 15,  # 这些参数在验证时不使用，但保留完整性
-        "num_random_depth_for_img_loss": 5,
-        "depth_dependent_weight_scale": 0.35,
-        "num_hist_bins": 200
     }
 
-    # 构建主网络（注意：若已改为复数网络 ComplexHoloNet，需替换类名；此处暂用原名，实际应同步更改）
-    holonet = TensorHolographyNet(
-        input_dim=4,                 # 单层 LDI
-        output_dim=6,
+    # 复数主网络，输出 3 个复数通道，无需 output_dim 参数
+    holonet = ComplexHoloNet(
+        input_dim=4,
         num_layers=args.num_layers,
         num_filters_per_layer=args.num_filters_per_layer,
         interleave_rate=1,
@@ -282,32 +249,26 @@ def main():
     ).to(device)
     load_model_weights(holonet, args.ckpt_path, device)
 
-    # 若 stage2 且需要 DDPM
     ddpm_net = None
     if args.mode == 'stage2' and args.activate_ddpm and not args.bypass_ddpm_network:
         ddpm_net = DDPMNet(
-            input_dim=6,
-            output_dim=6,
-            num_layers=8,
-            num_filters_per_layer=8,
-            interleave_rate=1,
-            filter_width=3,
-            bias_stddev=0.01,
-            weight_var_scale=0.25
+            input_dim=6, output_dim=6,
+            num_layers=8, num_filters_per_layer=8,
+            interleave_rate=1, filter_width=3,
+            bias_stddev=0.01, weight_var_scale=0.25
         ).to(device)
         if args.ddpm_ckpt_path:
             load_model_weights(ddpm_net, args.ddpm_ckpt_path, device)
         else:
-            # 若未单独指定，尝试从同一 checkpoint 加载（主 ckpt 中可能包含 ddpm_net_state_dict）
             checkpoint = torch.load(args.ckpt_path, map_location=device)
             if 'ddpm_net_state_dict' in checkpoint:
                 ddpm_net.load_state_dict(checkpoint['ddpm_net_state_dict'])
-                print("DDPM weights loaded from the same checkpoint.")
+                print("DDPM weights loaded from main checkpoint.")
             else:
-                raise ValueError("DDPM weights not found in checkpoint. Provide --ddpm-ckpt-path.")
+                raise ValueError("DDPM weights not found. Provide --ddpm-ckpt-path.")
 
     # 数据加载
-    cur_dir = os.getcwd()  # 项目根目录
+    cur_dir = os.getcwd()
     val_tfrecord = os.path.join(cur_dir, "data", f"validate_{args.dataset_res}_v2",
                                 "validate_04.tfrecord")
     labels = ["amp_4", "phs_4", "img_0", "depth_0"]
@@ -327,7 +288,6 @@ def main():
         drop_last=False
     )
 
-    # 执行验证
     if args.mode == 'stage1':
         validate_stage1(holonet, val_loader, hologram_params, device)
     else:
