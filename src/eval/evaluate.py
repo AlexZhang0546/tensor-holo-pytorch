@@ -2,11 +2,10 @@
 """
 单张图像推理脚本：对应原 TensorFlow 项目中 TensorHolographyModel.evaluate 方法。
 支持 LDI 格式输入（由 active_max_ldi_layer 控制层数），
-运行主网络（复数输出） + DDPM（可选） + 双相位编码（AA/BL/Maimone） + 物理光圈滤波，
+运行主网络（复数输出） + ComplexDDPM（可选） + 双相位编码（AA/BL/Maimone） + 物理光圈滤波，
 最终保存相位图、振幅图及各通道相位图等，输出与 TF 版本像素对齐。
 
-修复：深度图统一以 cv2.IMREAD_GRAYSCALE 读取，避免因单通道/三通道差异导致索引错误。
-本版本适配复数主网络输出，去掉 compl_val 构造步骤。
+本版本适配复数主网络与复数 DDPM 网络，去掉 amp/phs 分离与重组步骤。
 """
 
 import os
@@ -19,9 +18,8 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 使用复数主网络，不再使用原 TensorHolographyNet（实数输出）
 from src.models.holonet import ComplexHoloNet
-from src.models.ddpm_net import DDPMNet
+from src.models.ddpm_net import ComplexDDPMNet          # 复数 DDPM 网络
 from src.optics.propagation import propagator_factory
 from src.optics.complex_utils import compl_val, compl_exp
 from src.optics.dpm import aadpm, bldpm, dpm_maimone
@@ -55,53 +53,39 @@ def process_rgbd(rgb_path, depth_path, res_h, res_w, active_max_ldi_layer=0):
     """
     读取 RGB 和深度图像，并根据 LDI 层数构造输入张量。
     返回形状为 (1, C, H, W) 的 float32 张量，值域 [0,1]。
-
-    修复说明：
-        - 深度图改用 cv2.IMREAD_GRAYSCALE 强制灰度读取，直接得到 (H, W) 二维数组，
-          避免原代码假设三通道而可能出现的维度错误。
-        - RGB 仍保持 BGR->RGB 转换，与原 TF 版本一致。
     """
-    # 读取第一层 RGB (保持 BGR -> RGB 转换)
     rgb = cv2.resize(cv2.imread(rgb_path, cv2.IMREAD_COLOR)[:, :, ::-1], (res_w, res_h),
-                     interpolation=cv2.INTER_CUBIC)  # (H, W, 3)
-    rgb = np.transpose(rgb, (2, 0, 1)) / 255.0       # (3, H, W)
+                     interpolation=cv2.INTER_CUBIC)
+    rgb = np.transpose(rgb, (2, 0, 1)) / 255.0
 
-    # 读取深度图：强制灰度模式，避免通道歧义
     depth = cv2.imread(depth_path, cv2.IMREAD_GRAYSCALE)
     if depth is None:
         raise FileNotFoundError(f"Could not read depth image: {depth_path}")
-    depth = cv2.resize(depth, (res_w, res_h), interpolation=cv2.INTER_CUBIC)  # (H, W)
-    depth = depth.astype(np.float32) / 255.0          # 归一化到 [0, 1]
-    depth = depth[None, :, :]                         # (1, H, W)
+    depth = cv2.resize(depth, (res_w, res_h), interpolation=cv2.INTER_CUBIC)
+    depth = depth.astype(np.float32) / 255.0
+    depth = depth[None, :, :]
 
     if active_max_ldi_layer == 0:
         rgbd_np = np.concatenate([rgb, depth], axis=0)
     else:
-        # 多层 LDI：依次加载后缀为 _0, _1, ... 的 RGB 和深度图
         rgbd_parts = [rgb, depth]
         base_rgb, ext = os.path.splitext(rgb_path)
         base_depth, _ = os.path.splitext(depth_path)
         for i in range(1, active_max_ldi_layer + 1):
             rgb_i_path = f"{base_rgb}_{i}{ext}"
             depth_i_path = f"{base_depth}_{i}{ext}"
-
-            # 读取下一层 RGB
             rgb_i = cv2.resize(cv2.imread(rgb_i_path, cv2.IMREAD_COLOR)[:, :, ::-1],
                                (res_w, res_h), interpolation=cv2.INTER_CUBIC)
             rgb_i = np.transpose(rgb_i, (2, 0, 1)) / 255.0
-
-            # 读取下一层深度 (灰度)
             depth_i = cv2.imread(depth_i_path, cv2.IMREAD_GRAYSCALE)
             if depth_i is None:
                 raise FileNotFoundError(f"Could not read depth image: {depth_i_path}")
             depth_i = cv2.resize(depth_i, (res_w, res_h), interpolation=cv2.INTER_CUBIC)
             depth_i = depth_i.astype(np.float32) / 255.0
             depth_i = depth_i[None, :, :]
-
             rgbd_parts.append(rgb_i)
             rgbd_parts.append(depth_i)
-
-        rgbd_np = np.concatenate(rgbd_parts, axis=0)  # (C, H, W)
+        rgbd_np = np.concatenate(rgbd_parts, axis=0)
 
     rgbd_tensor = torch.from_numpy(rgbd_np).unsqueeze(0).float()
     return rgbd_tensor
@@ -122,7 +106,7 @@ def evaluate(args):
     }
 
     input_dim = 4 * (args.active_max_ldi_layer + 1)
-    # 复数主网络，输出直接为复数光场（3个颜色通道）
+    # 复数主网络
     holonet = ComplexHoloNet(
         input_dim=input_dim,
         num_layers=args.num_layers,
@@ -135,13 +119,18 @@ def evaluate(args):
 
     load_model(holonet, args.ckpt_path, device)
 
+    # 复数 DDPM 网络（替换原实数 DDPM）
     ddpm_net = None
     if args.activate_ddpm and not args.bypass_ddpm_network:
-        ddpm_net = DDPMNet(
-            input_dim=6, output_dim=6,
-            num_layers=8, num_filters_per_layer=8,
-            interleave_rate=1, filter_width=3,
-            bias_stddev=0.01, weight_var_scale=0.25
+        ddpm_net = ComplexDDPMNet(
+            input_dim=3,               # 复数 RGB 三通道
+            output_dim=3,
+            num_layers=8,
+            num_filters_per_layer=8,
+            interleave_rate=1,
+            filter_width=3,
+            bias_stddev=0.01,
+            weight_var_scale=0.25
         ).to(device)
         if args.ddpm_ckpt_path:
             load_model(ddpm_net, args.ddpm_ckpt_path, device)
@@ -170,31 +159,25 @@ def evaluate(args):
     wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
 
     with torch.no_grad():
-        # 主网络直接输出复数光场 (B, 3, H, W)
+        # 主网络直接输出复数光场
         complex_field = holonet(rgbd)
 
-    # 如果需要 padding，直接对复数张量进行常数填充（实部虚部同时填充零）
     if pad > 0:
         complex_field = F.pad(complex_field, (pad, pad, pad, pad), mode='constant', value=0.0)
 
-    # 深度偏移：直接用复数场传播，无需再用 compl_val 构造
+    # 深度偏移（保持复数）
     depth_shift = args.eval_depth_shift
-    holo_out = complex_field   # 复数全息图（已包含振幅和相位，相位为弧度）
+    holo_out = complex_field
     holo_shifted = propagator(holo_out, depth_shift) * compl_exp(
         -2 * np.pi * depth_shift / wavelengths_tensor)
 
-    # 提取振幅和相位（相位归一化到 [0,1]，供 DDPM 使用）
-    amp_shifted = torch.abs(holo_shifted)
-    phs_shifted = torch.angle(holo_shifted) / (2.0 * np.pi) + 0.5
-
+    # 复数 DDPM 校正：直接输入复数场，输出校正后的复数场
     if ddpm_net is not None:
-        amp_phs = torch.cat([amp_shifted, phs_shifted], dim=1)
-        amp_altered, phs_altered = ddpm_net(amp_phs)
+        holo_altered = ddpm_net(holo_shifted)        # (B, 3, H, W) 复数
     else:
-        amp_altered, phs_altered = amp_shifted, phs_shifted
+        holo_altered = holo_shifted
 
-    # DDPM 输出后仍需构造复数场（因为 DDPM 输出为实数振幅/相位）
-    holo_altered = compl_val(amp_altered, (phs_altered - 0.5) * 2.0 * np.pi)
+    # 后续 DPM 与光圈滤波（均接受复数场）
     phs_max = [args.phs_max * np.pi] * 3
 
     if args.use_maimone_dpm:
@@ -258,11 +241,10 @@ def evaluate(args):
         wavelength=hologram_params['wavelengths']
     )
 
-    # 提取主网络输出（原始复数场）的振幅和归一化相位，用于保存
-    amp_out = torch.abs(complex_field)                    # 振幅，值域与原网络一致
-    phs_out = torch.angle(complex_field) / (2.0 * np.pi) + 0.5  # 相位归一化到 [0,1]
+    # 保存主网络输出的振幅和相位（从复数场提取）
+    amp_out = torch.abs(complex_field)
+    phs_out = torch.angle(complex_field) / (2.0 * np.pi) + 0.5
 
-    # 转换并翻转（与原 TF 代码一致）
     amp_out_np = amp_out.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)[::-1, :, :]
     phs_out_np = phs_out.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)[::-1, :, :]
     phs_only_np = phs_only.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)[::-1, :, :]
