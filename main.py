@@ -1,6 +1,8 @@
+// File: main.py
 """
 程序总入口：解析命令行参数，根据模式分发到训练（stage1/stage2）、
 验证、评估或导出 ONNX 等功能。
+支持通过 --complex 标志启用复数神经网络（ComplexHoloNet/ComplexDDPMNet）。
 """
 
 import argparse
@@ -22,12 +24,14 @@ import src.eval.export_onnx as export_module
 
 def main():
     parser = argparse.ArgumentParser(description="Tensor Holography PyTorch")
+    # 全局复数标志（不影响现有子命令的参数）
+    parser.add_argument("--complex", action="store_true", default=False,
+                        help="Use complex-valued networks (ComplexHoloNet, ComplexDDPMNet)")
+
     subparsers = parser.add_subparsers(dest="mode", required=True, help="Operating mode")
 
     # 训练阶段一
     parser_s1 = subparsers.add_parser("train_stage1")
-    # parser_s1.add_argument("--config", type=str, default="configs/train_stage1.yaml",
-    #                        help="Path to YAML config (future use)")
     parser_s1.add_argument("--model-name", default="full_loss")
     parser_s1.add_argument("--dataset-res", type=int, default=192)
     parser_s1.add_argument("--pitch", type=float, default=0.008)
@@ -118,16 +122,24 @@ def main():
     parser_export.add_argument("--num-filters-per-layer", type=int, default=24)
 
     args = parser.parse_args()
+
+    # 根据全局 --complex 标志设置环境变量，供子模块内部判断使用复数模型
+    if args.complex:
+        os.environ["HOLONET_COMPLEX"] = "1"
+    else:
+        os.environ.pop("HOLONET_COMPLEX", None)  # 确保无残留
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def build_argv(args_dict, exclude_keys=('mode',)):
-        """将参数字典正确转换为命令行参数列表，正确处理 store_true 布尔值"""
+    def build_argv(args_dict, exclude_keys=('mode', 'complex')):
+        """将参数字典正确转换为命令行参数列表，正确处理 store_true 布尔值。
+        注意：complex 是全局标志，不传入子模块（通过环境变量传递）。
+        """
         cmd = [sys.argv[0]]
         for k, v in args_dict.items():
             if k in exclude_keys:
                 continue
             if isinstance(v, bool):
-                # store_true 参数：只有为 True 时才添加，直接加 --flag，不加 =True
                 if v:
                     cmd.append(f'--{k.replace("_", "-")}')
             else:
@@ -145,7 +157,7 @@ def main():
         sys.argv = build_argv(vars(args))
         validate_module.main()
     elif args.mode == "evaluate":
-        run_evaluate(args)      # evaluate 直接传 args 对象，不需要 sys.argv
+        run_evaluate(args)  # 直接传 args，evaluate 内部可读取环境变量
     elif args.mode == "export":
         sys.argv = build_argv(vars(args))
         export_module.main()
