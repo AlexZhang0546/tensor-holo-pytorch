@@ -231,7 +231,6 @@ def train_stage1(
                       f"SSIM_amp {ssim_amp.item():.4f}")
 
             # 定期验证
-                        # 定期验证
             if global_step % num_iter_per_test == 0 and global_step > 0:
                 model.eval()
                 val_holo_loss = 0.0
