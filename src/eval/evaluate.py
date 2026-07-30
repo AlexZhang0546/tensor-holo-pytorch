@@ -2,10 +2,11 @@
 """
 单张图像推理脚本：对应原 TensorFlow 项目中 TensorHolographyModel.evaluate 方法。
 支持 LDI 格式输入（由 active_max_ldi_layer 控制层数），
-运行主网络 + DDPM（可选）+ 双相位编码（AA/BL/Maimone）+ 物理光圈滤波，
+运行主网络（复数输出） + DDPM（可选） + 双相位编码（AA/BL/Maimone） + 物理光圈滤波，
 最终保存相位图、振幅图及各通道相位图等，输出与 TF 版本像素对齐。
 
 修复：深度图统一以 cv2.IMREAD_GRAYSCALE 读取，避免因单通道/三通道差异导致索引错误。
+本版本适配复数主网络输出，去掉 compl_val 构造步骤。
 """
 
 import os
@@ -18,7 +19,8 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.models.holonet import TensorHolographyNet
+# 使用复数主网络，不再使用原 TensorHolographyNet（实数输出）
+from src.models.holonet import ComplexHoloNet
 from src.models.ddpm_net import DDPMNet
 from src.optics.propagation import propagator_factory
 from src.optics.complex_utils import compl_val, compl_exp
@@ -120,9 +122,9 @@ def evaluate(args):
     }
 
     input_dim = 4 * (args.active_max_ldi_layer + 1)
-    holonet = TensorHolographyNet(
+    # 复数主网络，输出直接为复数光场（3个颜色通道）
+    holonet = ComplexHoloNet(
         input_dim=input_dim,
-        output_dim=6,
         num_layers=args.num_layers,
         num_filters_per_layer=args.num_filters_per_layer,
         interleave_rate=1,
@@ -168,16 +170,20 @@ def evaluate(args):
     wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
 
     with torch.no_grad():
-        amp_out, phs_out = holonet(rgbd)
+        # 主网络直接输出复数光场 (B, 3, H, W)
+        complex_field = holonet(rgbd)
 
+    # 如果需要 padding，直接对复数张量进行常数填充（实部虚部同时填充零）
     if pad > 0:
-        amp_out = F.pad(amp_out, (pad, pad, pad, pad), mode='constant', value=0.0)
-        phs_out = F.pad(phs_out, (pad, pad, pad, pad), mode='constant', value=0.5)
+        complex_field = F.pad(complex_field, (pad, pad, pad, pad), mode='constant', value=0.0)
 
+    # 深度偏移：直接用复数场传播，无需再用 compl_val 构造
     depth_shift = args.eval_depth_shift
-    holo_out = compl_val(amp_out, (phs_out - 0.5) * 2.0 * np.pi)
+    holo_out = complex_field   # 复数全息图（已包含振幅和相位，相位为弧度）
     holo_shifted = propagator(holo_out, depth_shift) * compl_exp(
         -2 * np.pi * depth_shift / wavelengths_tensor)
+
+    # 提取振幅和相位（相位归一化到 [0,1]，供 DDPM 使用）
     amp_shifted = torch.abs(holo_shifted)
     phs_shifted = torch.angle(holo_shifted) / (2.0 * np.pi) + 0.5
 
@@ -187,6 +193,7 @@ def evaluate(args):
     else:
         amp_altered, phs_altered = amp_shifted, phs_shifted
 
+    # DDPM 输出后仍需构造复数场（因为 DDPM 输出为实数振幅/相位）
     holo_altered = compl_val(amp_altered, (phs_altered - 0.5) * 2.0 * np.pi)
     phs_max = [args.phs_max * np.pi] * 3
 
@@ -250,6 +257,10 @@ def evaluate(args):
         amp_max=amp_max,
         wavelength=hologram_params['wavelengths']
     )
+
+    # 提取主网络输出（原始复数场）的振幅和归一化相位，用于保存
+    amp_out = torch.abs(complex_field)                    # 振幅，值域与原网络一致
+    phs_out = torch.angle(complex_field) / (2.0 * np.pi) + 0.5  # 相位归一化到 [0,1]
 
     # 转换并翻转（与原 TF 代码一致）
     amp_out_np = amp_out.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)[::-1, :, :]
