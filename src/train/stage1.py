@@ -237,8 +237,8 @@ def train_stage1(
                 val_fs_loss = 0.0
                 val_ssim_amp = 0.0
                 val_ssim_img = 0.0
-                val_psnr_amp = 0.0          # 新增
-                val_psnr_img = 0.0          # 新增
+                val_psnr_amp = 0.0
+                val_psnr_img = 0.0
                 num_val_batches = len(val_loader)
                 with torch.no_grad():
                     for val_batch in val_loader:
@@ -256,15 +256,15 @@ def train_stage1(
                         val_fs_loss += v_fs.item()
                         val_ssim_amp += v_ssim_amp.item()
                         val_ssim_img += v_ssim_img.item()
-                        val_psnr_amp += v_psnr_amp.item()   # 新增
-                        val_psnr_img += v_psnr_img.item()   # 新增
+                        val_psnr_amp += v_psnr_amp.item()
+                        val_psnr_img += v_psnr_img.item()
 
                 val_holo_loss /= num_val_batches
                 val_fs_loss /= num_val_batches
                 val_ssim_amp /= num_val_batches
                 val_ssim_img /= num_val_batches
-                val_psnr_amp /= num_val_batches             # 新增
-                val_psnr_img /= num_val_batches             # 新增
+                val_psnr_amp /= num_val_batches
+                val_psnr_img /= num_val_batches
 
                 print(f"--- Validation at step {global_step} ---")
                 print(f"Avg Holo Loss: {val_holo_loss:.6f} | Avg FS Loss: {val_fs_loss:.6f} | "
