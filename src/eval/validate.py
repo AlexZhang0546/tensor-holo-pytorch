@@ -191,7 +191,8 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
 
 def main():
     parser = argparse.ArgumentParser(description='Validate Complex Holonet / DDPM model')
-    parser.add_argument('--mode', type=str, required=True, choices=['stage1', 'stage2'])
+    parser.add_argument('--val-mode', type=str, required=True, choices=['stage1', 'stage2'],
+                        help='Validation stage')
     parser.add_argument('--model-name', default='full_loss', type=str)
     parser.add_argument('--dataset-res', default=192, type=int)
     parser.add_argument('--pitch', default=0.008, type=float)
