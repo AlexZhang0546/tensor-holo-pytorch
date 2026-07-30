@@ -435,7 +435,7 @@ def train_stage2(
 
             global_step += 1
 
-                        # ---------- 定期验证 ----------
+            # ---------- 定期验证 ----------
             if global_step % training_params.get('num_iter_per_test', 500) == 0 and global_step > 0:
                 holonet.eval()
                 if ddpm_net is not None:
@@ -443,7 +443,7 @@ def train_stage2(
 
                 val_stats = {'loss': 0.0, 'fs_loss': 0.0, 'fs_tv': 0.0,
                              'ssim_amp': 0.0, 'ssim_img': 0.0, 'mean_loss': 0.0, 'std_loss': 0.0,
-                             'psnr_amp': 0.0, 'psnr_img': 0.0}       # 新增两个键
+                             'psnr_amp': 0.0, 'psnr_img': 0.0}
                 num_val_batches = 0
                 with torch.no_grad():
                     for val_batch in val_loader:
@@ -459,7 +459,7 @@ def train_stage2(
                             bypass_ddpm=bypass_ddpm
                         )
                         for k in val_stats:
-                            val_stats[k] += val_outputs[k].item()   # 现在会累加 psnr_amp 和 psnr_img
+                            val_stats[k] += val_outputs[k].item()
                         num_val_batches += 1
 
                 for k in val_stats:
@@ -467,8 +467,8 @@ def train_stage2(
 
                 print(f"--- Validation at step {global_step} ---")
                 print(f"Loss: {val_stats['loss']:.6f} | FS: {val_stats['fs_loss']:.6f} | TV: {val_stats['fs_tv']:.6f} | "
-                      f"SSIM_amp: {val_stats['ssim_amp']:.4f} | PSNR_amp: {val_stats['psnr_amp']:.2f} | "   # 新增
-                      f"SSIM_img: {val_stats['ssim_img']:.4f} | PSNR_img: {val_stats['psnr_img']:.2f}")    # 新增
+                      f"SSIM_amp: {val_stats['ssim_amp']:.4f} | PSNR_amp: {val_stats['psnr_amp']:.2f} | "
+                      f"SSIM_img: {val_stats['ssim_img']:.4f} | PSNR_img: {val_stats['psnr_img']:.2f}")
                 if not bypass_ddpm and ddpm_net is not None:
                     print(f"Mean: {val_stats['mean_loss']:.6f} | Std: {val_stats['std_loss']:.6f}")
 
