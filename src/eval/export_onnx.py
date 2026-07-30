@@ -1,18 +1,19 @@
+# src/eval/export_onnx.py
 """
 导出 ONNX 模型脚本（替代原 export_for_tensorrt）。
-将训练好的 HoloNet（及可选的 DDPMNet）导出为 ONNX 格式，
-便于后续使用 TensorRT 加速推理。
-注意：导出时仅支持 depth_shift=0，因为 ONNX 不支持复数运算。
+将训练好的 ComplexHoloNet（及可选的 ComplexDDPMNet）导出为 ONNX 格式，
+由于 ONNX 不支持复数张量，故将输出拆分为实部与虚部两个实数张量。
 """
 
 import os
 import argparse
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 
-from src.models.holonet import TensorHolographyNet
-from src.models.ddpm_net import DDPMNet
+from src.models.holonet import ComplexHoloNet
+from src.models.ddpm_net import ComplexDDPMNet
 from typing import Optional
 
 
@@ -27,9 +28,9 @@ def export_onnx(
     device: str = "cpu"
 ):
     """
-    将模型导出为 ONNX 格式，输出包括 amp_out_altered 和 phs_out_altered。
-    如果需要 DDPM 网络，则将其与 holonet 串联导出；否则仅导出 holonet 的输出。
-    动态轴支持 batch 维度，便于推理时更改 batch size。
+    将复数模型导出为 ONNX 格式，输出为复数场的实部（real_out）和虚部（imag_out）。
+    若提供 DDPM 网络，则将 holonet 输出传入 ddpm_net，再拆分实部虚部。
+    动态轴支持 batch 维度。
     """
     # 模型设为评估模式
     holonet.eval()
@@ -40,7 +41,7 @@ def export_onnx(
     dummy_rgbd = torch.randn(1, input_dim, res_h, res_w, device=device)
 
     class ExportModel(nn.Module):
-        """封装 holonet 和可选的 ddpm_net，便于导出。"""
+        """封装 holonet 和可选的 ddpm_net，输出实部与虚部实数张量。"""
         def __init__(self, holonet, ddpm_net=None, pad=0):
             super().__init__()
             self.holonet = holonet
@@ -48,33 +49,31 @@ def export_onnx(
             self.pad = pad
 
         def forward(self, x):
-            amp_out, phs_out = self.holonet(x)  # (B,3,H,W) [0,√2], [0,1]
+            # 复数主网络输出复数场 (B, 3, H, W)
+            complex_field = self.holonet(x)
 
-            # 添加 padding（与原 TF export 逻辑一致）
+            # 添加 padding（对复数张量的实部与虚部分别填充）
             if self.pad > 0:
-                amp_out = torch.nn.functional.pad(
-                    amp_out, (self.pad, self.pad, self.pad, self.pad),
-                    mode='constant', value=0.0
-                )
-                phs_out = torch.nn.functional.pad(
-                    phs_out, (self.pad, self.pad, self.pad, self.pad),
-                    mode='constant', value=0.5
-                )
+                real_padded = F.pad(complex_field.real, (self.pad, self.pad, self.pad, self.pad),
+                                    mode='constant', value=0.0)
+                imag_padded = F.pad(complex_field.imag, (self.pad, self.pad, self.pad, self.pad),
+                                    mode='constant', value=0.0)
+                complex_field = torch.complex(real_padded, imag_padded)
 
             if self.ddpm_net is not None:
-                # 拼接 amp 和 phs，经过 ddpm 网络
-                amp_phs = torch.cat([amp_out, phs_out], dim=1)  # (B,6,H,W)
-                amp_out, phs_out = self.ddpm_net(amp_phs)
+                # DDPM 网络接受复数场，输出复数场
+                complex_field = self.ddpm_net(complex_field)
 
-            return amp_out, phs_out
+            # 拆分为实部和虚部实数张量，便于 ONNX 导出
+            return complex_field.real, complex_field.imag
 
     export_model = ExportModel(holonet, ddpm_net, pad).to(device)
 
     # 定义动态轴
     dynamic_axes = {
         "input": {0: "batch_size"},
-        "amp_out": {0: "batch_size"},
-        "phs_out": {0: "batch_size"}
+        "real_out": {0: "batch_size"},
+        "imag_out": {0: "batch_size"}
     }
 
     # 导出
@@ -83,9 +82,9 @@ def export_onnx(
         dummy_rgbd,
         output_path,
         input_names=["input"],
-        output_names=["amp_out", "phs_out"],
+        output_names=["real_out", "imag_out"],
         dynamic_axes=dynamic_axes,
-        opset_version=14,   # 推荐使用较新版本
+        opset_version=14,
         do_constant_folding=True,
         verbose=False
     )
@@ -93,7 +92,7 @@ def export_onnx(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Export Holonet to ONNX")
+    parser = argparse.ArgumentParser(description="Export ComplexHoloNet to ONNX")
     parser.add_argument("--ckpt-path", type=str, required=True, help="Path to PyTorch checkpoint")
     parser.add_argument("--ddpm-ckpt-path", type=str, default=None, help="Separate DDPM checkpoint")
     parser.add_argument("--output", type=str, default="inference_graph_v2.onnx")
@@ -108,9 +107,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     device = "cpu"  # 导出一般用 CPU 即可
-    holonet = TensorHolographyNet(
+    holonet = ComplexHoloNet(
         input_dim=args.input_dim,
-        output_dim=6,
         num_layers=args.num_layers,
         num_filters_per_layer=args.num_filters_per_layer
     ).to(device)
@@ -124,11 +122,11 @@ if __name__ == "__main__":
     else:
         holonet.load_state_dict(checkpoint)
 
-    # 可选的 DDPM 网络
+    # 可选的 DDPM 网络（复数版本）
     ddpm_net = None
     if args.activate_ddpm:
-        ddpm_net = DDPMNet(
-            input_dim=6, output_dim=6, num_layers=8, num_filters_per_layer=8
+        ddpm_net = ComplexDDPMNet(
+            input_dim=3, output_dim=3, num_layers=8, num_filters_per_layer=8
         ).to(device)
         if args.ddpm_ckpt_path:
             ddpm_checkpoint = torch.load(args.ddpm_ckpt_path, map_location=device)
