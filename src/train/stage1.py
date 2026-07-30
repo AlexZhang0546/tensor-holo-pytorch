@@ -231,12 +231,15 @@ def train_stage1(
                       f"SSIM_amp {ssim_amp.item():.4f}")
 
             # 定期验证
+                        # 定期验证
             if global_step % num_iter_per_test == 0 and global_step > 0:
                 model.eval()
                 val_holo_loss = 0.0
                 val_fs_loss = 0.0
                 val_ssim_amp = 0.0
                 val_ssim_img = 0.0
+                val_psnr_amp = 0.0          # 新增
+                val_psnr_img = 0.0          # 新增
                 num_val_batches = len(val_loader)
                 with torch.no_grad():
                     for val_batch in val_loader:
@@ -244,7 +247,8 @@ def train_stage1(
                         val_target = val_batch['target_complex'].to(device)
 
                         val_holo_out = model(val_rgbd)
-                        _, v_holo, v_fs, _, v_ssim_amp, _, v_ssim_img, _ = combine_loss(
+                        # 解包所有返回值（注意顺序与 combine_loss 一致）
+                        _, v_holo, v_fs, _, v_ssim_amp, v_psnr_amp, v_ssim_img, v_psnr_img = combine_loss(
                             val_holo_out, val_target, val_rgbd,
                             propagator, hologram_params, training_params,
                             loss_fn, loss_type, loss_params, pad=0
@@ -253,14 +257,20 @@ def train_stage1(
                         val_fs_loss += v_fs.item()
                         val_ssim_amp += v_ssim_amp.item()
                         val_ssim_img += v_ssim_img.item()
+                        val_psnr_amp += v_psnr_amp.item()   # 新增
+                        val_psnr_img += v_psnr_img.item()   # 新增
 
                 val_holo_loss /= num_val_batches
                 val_fs_loss /= num_val_batches
                 val_ssim_amp /= num_val_batches
                 val_ssim_img /= num_val_batches
+                val_psnr_amp /= num_val_batches             # 新增
+                val_psnr_img /= num_val_batches             # 新增
+
                 print(f"--- Validation at step {global_step} ---")
                 print(f"Avg Holo Loss: {val_holo_loss:.6f} | Avg FS Loss: {val_fs_loss:.6f} | "
-                      f"SSIM Amp: {val_ssim_amp:.4f} | SSIM Img: {val_ssim_img:.4f}")
+                      f"SSIM Amp: {val_ssim_amp:.4f} | PSNR Amp: {val_psnr_amp:.2f} | "       # 新增 PSNR Amp
+                      f"SSIM Img: {val_ssim_img:.4f} | PSNR Img: {val_psnr_img:.2f}")        # 新增 PSNR Img
                 model.train()
 
         # 每个 epoch 结束打印平均损失
