@@ -1,8 +1,8 @@
 # src/train/stage2.py
 """
-阶段二训练脚本：DDPM 网络校正与联合微调。
-包含 identity 预训练（冻结主网络，仅优化 DDPM）和联合训练（主网络 + DDPM 同时优化）。
-修复：恢复训练时优化器未定义问题。
+阶段二训练脚本：DDPM 网络校正与联合微调（复数版本）。
+适配复数主网络 ComplexHoloNet 与复数 DDPM 网络 ComplexDDPMNet，
+直接处理复数全息场，移除 compl_val 构造步骤。
 """
 
 import os
@@ -10,13 +10,14 @@ import sys
 import argparse
 import numpy as np
 import torch
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.models.holonet import TensorHolographyNet
-from src.models.ddpm_net import DDPMNet
+from src.models.holonet import ComplexHoloNet
+from src.models.ddpm_net import ComplexDDPMNet
 from src.data.dataset import THDataset, create_dataloader
 from src.optics.propagation import propagator_factory
 from src.optics.complex_utils import compl_val, compl_exp
@@ -63,7 +64,24 @@ def parse_args():
 
 
 # ----------------------------------------------------------------------
-# 工具函数：构建带 padding 的传播算子
+# 工具函数：复数张量 padding
+# ----------------------------------------------------------------------
+def complex_pad(x: torch.Tensor, pad: int, mode: str = 'constant',
+                real_value: float = 0.0, imag_value: float = 0.0) -> torch.Tensor:
+    """
+    对复数张量 (..., H, W) 进行对称 padding。
+    分别对实部、虚部进行填充，再组合为复数张量。
+    """
+    if pad == 0:
+        return x
+    pad_tuple = (pad, pad, pad, pad)  # 左,右,上,下
+    real_padded = F.pad(x.real, pad_tuple, mode=mode, value=real_value)
+    imag_padded = F.pad(x.imag, pad_tuple, mode=mode, value=imag_value)
+    return torch.complex(real_padded, imag_padded)
+
+
+# ----------------------------------------------------------------------
+# 构建带 padding 的传播算子
 # ----------------------------------------------------------------------
 def build_propagator_padded(hologram_params, pad):
     res_h = hologram_params['res_h']
@@ -78,7 +96,26 @@ def build_propagator_padded(hologram_params, pad):
 
 
 # ----------------------------------------------------------------------
-# 完整前向传播与损失计算（训练/验证复用）
+# 恒等预训练损失（复数版本）
+# ----------------------------------------------------------------------
+def identity_loss(holo_altered: torch.Tensor, holo_shifted: torch.Tensor, loss_fn):
+    """
+    计算 DDPM 网络的恒等损失，要求输出复数场与输入尽可能接近。
+    同时计算振幅 SSIM 以监控。
+    """
+    loss_real = loss_fn(holo_altered.real, holo_shifted.real)
+    loss_imag = loss_fn(holo_altered.imag, holo_shifted.imag)
+    total = loss_real + loss_imag
+
+    amp_altered = torch.abs(holo_altered)
+    amp_shifted = torch.abs(holo_shifted)
+    # 注意：原代码振幅范围可能是 [0, √2]，但 SSIM 使用 data_range=1.0，保持一致
+    ssim_amp = compute_ssim(amp_altered, amp_shifted, data_range=1.0)
+    return total, ssim_amp
+
+
+# ----------------------------------------------------------------------
+# 完整前向传播与损失计算（训练/验证复用，复数版本）
 # ----------------------------------------------------------------------
 def _run_stage2_forward(
     rgbd, amp_gt, phs_gt,
@@ -87,37 +124,34 @@ def _run_stage2_forward(
     hologram_params, training_params, loss_params, loss_fn,
     bypass_ddpm=False
 ):
-    """执行 stage2 完整前向传播，并计算总损失与指标。"""
+    """
+    执行 stage2 完整前向传播，所有网络输出均为复数场，不再通过 amp, phs 构造。
+    返回总损失与各项指标。
+    """
     device = rgbd.device
     wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
 
-    # 1. 主网络输出
-    amp_mid, phs_mid = holonet(rgbd)
+    # 1. 主网络输出复数全息场 (B, 3, H, W)
+    holo_mid = holonet(rgbd)  # 复数
 
     # 2. padding
-    if pad > 0:
-        amp_mid_padded = torch.nn.functional.pad(amp_mid, (pad, pad, pad, pad), mode='constant', value=0.0)
-        phs_mid_padded = torch.nn.functional.pad(phs_mid, (pad, pad, pad, pad), mode='constant', value=0.5)
-    else:
-        amp_mid_padded, phs_mid_padded = amp_mid, phs_mid
+    holo_mid_padded = complex_pad(holo_mid, pad)
 
     # 3. 深度偏移
-    holo_mid = compl_val(amp_mid_padded, (phs_mid_padded - 0.5) * 2.0 * np.pi)
-    holo_shifted = propagator_pad(holo_mid, depth_shift) * compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
-    amp_shifted = torch.abs(holo_shifted)
-    phs_shifted = torch.angle(holo_shifted) / (2.0 * np.pi) + 0.5
+    holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
+                   compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
 
     # 4. DDPM 校正或 bypass
     if ddpm_net is not None and not bypass_ddpm:
-        amp_phs_shifted = torch.cat([amp_shifted, phs_shifted], dim=1)
-        amp_altered, phs_altered = ddpm_net(amp_phs_shifted)
-        phs_for_reg = phs_altered
+        # 复数 DDPM 网络直接接收复数场
+        holo_altered = ddpm_net(holo_shifted)
+        # 提取相位用于正则（转为 [0,1] 归一化相位）
+        phs_for_reg = torch.angle(holo_altered) / (2.0 * np.pi) + 0.5
     else:
-        amp_altered, phs_altered = amp_shifted, phs_shifted
+        holo_altered = holo_shifted
         phs_for_reg = None
 
-    # 5. 双相位编码 (AA-DPM)
-    holo_altered = compl_val(amp_altered, (phs_altered - 0.5) * 2.0 * np.pi)
+    # 5. 双相位编码 (AA-DPM) ，直接传入复数场
     phs_only, amp_max = aadpm(
         holo_altered,
         propagator=propagator_pad,
@@ -129,18 +163,18 @@ def _run_stage2_forward(
         res_w=holo_altered.shape[3],
         sigma=0.0,
         kernel_width=3,
-        phs_max=None,               # 与原版一致：不包裹
+        phs_max=None,
         amp_max=None,
         clamp=True,
-        normalize=False,            # 不归一化到 [0,1]
+        normalize=False,
         wavelength=hologram_params['wavelengths']
     )
 
     # 6. 物理光圈滤波并反向传播回 midpoint
     amp_final, phs_final = filter_phs_only(
         phs_only,
-        unnormalize_input=False,    # 输入是弧度
-        normalize_output=False,     # 输出保持弧度
+        unnormalize_input=False,
+        normalize_output=False,
         propagator=propagator_pad,
         depth_shift=-depth_shift,
         batch=rgbd.size(0),
@@ -148,29 +182,25 @@ def _run_stage2_forward(
         res_h=holo_altered.shape[2],
         res_w=holo_altered.shape[3],
         radius=None,
-        phs_max=None,               # 或者保留但不会使用，因为 unnormalize_input=False
+        phs_max=None,
         amp_max=amp_max,
         wavelength=hologram_params['wavelengths']
     )
 
-    # 7. 目标全息图 padding
-    if pad > 0:
-        amp_gt_padded = torch.nn.functional.pad(amp_gt, (pad, pad, pad, pad), mode='constant', value=0.0)
-        phs_gt_padded = torch.nn.functional.pad(phs_gt, (pad, pad, pad, pad), mode='constant', value=0.5)
-    else:
-        amp_gt_padded, phs_gt_padded = amp_gt, phs_gt
+    # 7. 目标全息图构造并 padding（目标仍为 amp/phs，需构造一次复数场）
+    holo_gt = compl_val(amp_gt, (phs_gt - 0.5) * 2.0 * np.pi)
+    holo_gt_padded = complex_pad(holo_gt, pad)
 
-    # 8. 焦栈损失
+    # 8. 焦栈损失（需要复数输入，将最终振幅/相位构造为复数场）
     holo_out = compl_val(amp_final, phs_final)
-    holo_gt  = compl_val(amp_gt_padded, (phs_gt_padded - 0.5) * 2.0 * np.pi)
     fs_loss, fs_tv, ssim_img, psnr_img = compute_focal_stack_loss(
-        holo_out, holo_gt, rgbd, propagator_pad,
+        holo_out, holo_gt_padded, rgbd, propagator_pad,
         hologram_params, training_params, loss_fn, pad=pad
     )
 
-    # 9. 振幅图 SSIM/PSNR
+    # 9. 振幅图 SSIM/PSNR（裁剪有效区域后与目标振幅比较）
     amp_crop = amp_final[:, :, pad:pad + hologram_params['res_h'], pad:pad + hologram_params['res_w']]
-    amp_gt_crop = amp_gt_padded[:, :, pad:pad + hologram_params['res_h'], pad:pad + hologram_params['res_w']]
+    amp_gt_crop = amp_gt[:, :, pad:pad + hologram_params['res_h'], pad:pad + hologram_params['res_w']]
     ssim_amp = compute_ssim(amp_crop, amp_gt_crop, data_range=1.0)
     psnr_amp = compute_psnr(amp_crop, amp_gt_crop, data_range=1.0)
 
@@ -204,18 +234,6 @@ def _run_stage2_forward(
 
 
 # ----------------------------------------------------------------------
-# Identity 预训练损失
-# ----------------------------------------------------------------------
-def identity_loss(amp_out_shift, phs_out_shift,
-                  amp_out_shift_altered, phs_out_shift_altered, loss_fn):
-    loss_amp = loss_fn(amp_out_shift_altered, amp_out_shift)
-    loss_phs = loss_fn(phs_out_shift_altered, phs_out_shift)
-    total = loss_amp + loss_phs
-    ssim_amp = compute_ssim(amp_out_shift_altered, amp_out_shift, data_range=1.0)
-    return total, ssim_amp
-
-
-# ----------------------------------------------------------------------
 # 保存与加载 checkpoint
 # ----------------------------------------------------------------------
 def save_checkpoint(state, filename):
@@ -237,9 +255,9 @@ def train_stage2(
     restore_stage2=False,
     bypass_ddpm=False
 ):
-    # ---------- 构建模型 ----------
-    holonet = TensorHolographyNet(**model_params).to(device)
-    ddpm_net = DDPMNet(**ddpm_params).to(device) if not bypass_ddpm else None
+    # ---------- 构建模型（复数版本） ----------
+    holonet = ComplexHoloNet(**model_params).to(device)
+    ddpm_net = ComplexDDPMNet(**ddpm_params).to(device) if not bypass_ddpm else None
 
     # ---------- 加载 stage1 权重 ----------
     if stage1_ckpt_path and os.path.exists(stage1_ckpt_path):
@@ -256,10 +274,9 @@ def train_stage2(
 
     # ---------- 损失函数 ----------
     loss_type = loss_params.get('loss_type', 'l1')
-    loss_fn = torch.nn.functional.l1_loss if loss_type == 'l1' else torch.nn.functional.mse_loss
+    loss_fn = F.l1_loss if loss_type == 'l1' else F.mse_loss
 
-    # ---------- 优化器：提前创建，以便恢复训练时加载状态 ----------
-    # identity 优化器（仅在非 bypass 且 ddpm_net 存在时使用）
+    # ---------- 优化器 ----------
     if ddpm_net is not None and not bypass_ddpm:
         optimizer_identity = optim.Adam(
             ddpm_net.parameters(),
@@ -269,7 +286,7 @@ def train_stage2(
     else:
         optimizer_identity = None
 
-    # 联合优化器（始终存在，因为主网络肯定需要优化）
+    # 联合优化器
     params_joint = list(holonet.parameters())
     if ddpm_net is not None and not bypass_ddpm:
         params_joint += list(ddpm_net.parameters())
@@ -286,13 +303,12 @@ def train_stage2(
     start_epoch_joint = 0
     global_step = 0
 
-    # 检查是否恢复 stage2 训练
+    # 尝试恢复 stage2 训练
     if restore_stage2:
         identity_ckpt = os.path.join(stage2_ckpt_dir, 'stage2_identity_latest.pth')
         joint_ckpt = os.path.join(stage2_ckpt_dir, 'stage2_joint_latest.pth')
 
         if os.path.exists(joint_ckpt):
-            # 恢复联合训练阶段
             print(f"Resuming joint training from {joint_ckpt}")
             ckpt = load_checkpoint(joint_ckpt)
             holonet.load_state_dict(ckpt['holonet_state_dict'])
@@ -301,10 +317,8 @@ def train_stage2(
             optimizer_joint.load_state_dict(ckpt['optimizer_joint_state_dict'])
             start_epoch_joint = ckpt['epoch'] + 1
             global_step = ckpt.get('global_step', 0)
-            # 跳过 identity 阶段
-            start_epoch_identity = identity_epochs
+            start_epoch_identity = identity_epochs  # 跳过 identity 阶段
         elif os.path.exists(identity_ckpt) and ddpm_net is not None:
-            # 恢复 identity 预训练阶段
             print(f"Resuming identity pretraining from {identity_ckpt}")
             ckpt = load_checkpoint(identity_ckpt)
             ddpm_net.load_state_dict(ckpt['ddpm_net_state_dict'])
@@ -324,32 +338,18 @@ def train_stage2(
             epoch_ssim = 0.0
             for batch_idx, batch_data in enumerate(train_loader):
                 rgbd = batch_data['rgbd'].to(device)
-                amp_gt = batch_data['amp_4'].to(device)
-                phs_gt = batch_data['phs_4'].to(device)
-
+                # 对于恒等预训练，目标全息图不直接使用，只需要 rgbd 生成 holo_shifted
                 with torch.no_grad():
-                    amp_mid, phs_mid = holonet(rgbd)
-
-                # padding / 深度偏移
-                if pad > 0:
-                    amp_mid_padded = torch.nn.functional.pad(amp_mid, (pad, pad, pad, pad), mode='constant', value=0.0)
-                    phs_mid_padded = torch.nn.functional.pad(phs_mid, (pad, pad, pad, pad), mode='constant', value=0.5)
-                else:
-                    amp_mid_padded, phs_mid_padded = amp_mid, phs_mid
-
+                    holo_mid = holonet(rgbd)
+                holo_mid_padded = complex_pad(holo_mid, pad)
                 wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
-                holo_mid = compl_val(amp_mid_padded, (phs_mid_padded - 0.5) * 2.0 * np.pi)
-                holo_shifted = propagator_pad(holo_mid, depth_shift) * compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
-                amp_shifted = torch.abs(holo_shifted)
-                phs_shifted = torch.angle(holo_shifted) / (2.0 * np.pi) + 0.5
+                holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
+                               compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
 
-                # DDPM 网络输出
-                amp_phs_shifted = torch.cat([amp_shifted, phs_shifted], dim=1)
-                amp_altered, phs_altered = ddpm_net(amp_phs_shifted)
+                # DDPM 网络直接处理复数场
+                holo_altered = ddpm_net(holo_shifted)
 
-                # 恒等损失
-                total_loss, ssim_amp = identity_loss(amp_shifted, phs_shifted,
-                                                     amp_altered, phs_altered, loss_fn)
+                total_loss, ssim_amp = identity_loss(holo_altered, holo_shifted, loss_fn)
 
                 optimizer_identity.zero_grad()
                 total_loss.backward()
@@ -384,7 +384,6 @@ def train_stage2(
         print("Identity pretraining completed.")
 
     # ---------- 阶段 2b: 联合训练 ----------
-    # 确保模型处于训练模式
     holonet.train()
     if ddpm_net is not None:
         ddpm_net.train()
@@ -508,7 +507,7 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # 配置参数（与原项目保持一致）
+    # 配置参数
     hologram_params = {
         "wavelengths": np.array([0.000450, 0.000520, 0.000638]),
         "pitch": args.pitch,
@@ -535,9 +534,9 @@ def main():
         "padding": args.padding,
     }
 
+    # 复数主网络参数（移除 output_dim，复数网络固定输出3通道复数场）
     model_params = {
         "input_dim": 4,
-        "output_dim": 6,
         "num_layers": args.num_layers,
         "num_filters_per_layer": args.num_filters_per_layer,
         "interleave_rate": 1,
@@ -546,9 +545,10 @@ def main():
         "weight_var_scale": 0.25
     }
 
+    # 复数 DDPM 网络参数（输入/输出均为3通道复数）
     ddpm_params = {
-        "input_dim": 6,
-        "output_dim": 6,
+        "input_dim": 3,
+        "output_dim": 3,
         "num_layers": 8,
         "num_filters_per_layer": 8,
         "interleave_rate": 1,
