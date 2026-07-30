@@ -74,8 +74,8 @@ def validate_stage1(holonet, val_loader, hologram_params, device):
             amp_out = holo_out.abs()
 
             for i in range(amp_out.size(0)):
-                ssim_val = compute_ssim(amp_out[i], amp_gt[i], data_range=1.0)
-                psnr_val = compute_psnr(amp_out[i], amp_gt[i], data_range=1.0)
+                ssim_val = compute_ssim(amp_out[i], amp_gt[i], data_range=1.414)
+                psnr_val = compute_psnr(amp_out[i], amp_gt[i], data_range=1.414)
                 ssim_list.append(ssim_val.item())
                 psnr_list.append(psnr_val.item())
 
@@ -173,8 +173,8 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
 
             # 7. 与目标振幅比较
             for i in range(amp_final.size(0)):
-                ssim_val = compute_ssim(amp_final[i], amp_gt_padded[i], data_range=1.0)
-                psnr_val = compute_psnr(amp_final[i], amp_gt_padded[i], data_range=1.0)
+                ssim_val = compute_ssim(amp_final[i], amp_gt_padded[i], data_range=1.414)
+                psnr_val = compute_psnr(amp_final[i], amp_gt_padded[i], data_range=1.414)
                 ssim_list.append(ssim_val.item())
                 psnr_list.append(psnr_val.item())
 
