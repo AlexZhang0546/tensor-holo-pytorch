@@ -217,22 +217,6 @@ class ComplexBatchNorm2d(nn.Module):
         return torch.complex(y_real, y_imag)
 
 
-class SimpleComplexBatchNorm2d(nn.Module):
-    """
-    简化版复数批归一化（仅供对照实验，不推荐用于最终模型）。
-    分别对实部和虚部执行独立的 2D BatchNorm，忽略了二者的相关性。
-    当对精度要求不高且需要快速原型时可用。
-    """
-    def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True,
-                 track_running_stats=True):
-        super().__init__()
-        self.bn_real = nn.BatchNorm2d(num_features, eps, momentum, affine, track_running_stats)
-        self.bn_imag = nn.BatchNorm2d(num_features, eps, momentum, affine, track_running_stats)
-
-    def forward(self, x):
-        return torch.complex(self.bn_real(x.real), self.bn_imag(x.imag))
-
-
 class ComplexReLU(nn.Module):
     """
     modReLU 激活函数。
