@@ -64,7 +64,8 @@ def main():
 
     # 验证
     parser_val = subparsers.add_parser("validate")
-    parser_val.add_argument("--mode", type=str, required=True, choices=["stage1", "stage2"])
+    parser_val.add_argument("--val-mode", type=str, required=True, choices=["stage1", "stage2"],
+                            help="Validation stage")
     parser_val.add_argument("--ckpt-path", type=str, required=True)
     parser_val.add_argument("--ddpm-ckpt-path", type=str, default=None)
     parser_val.add_argument("--model-name", default="full_loss")
