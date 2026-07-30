@@ -1,8 +1,7 @@
 # src/eval/validate.py
 """
 批量验证脚本（复数网络适配版）。
-使用 ComplexHoloNet 直接输出复数场，不再通过 compl_val 构造。
-DDPM 校正部分仍采用实数输入/输出，与现有 DDPMNet 兼容。
+使用 ComplexHoloNet 和 ComplexDDPMNet，所有内部光场均为复数。
 """
 
 import os
@@ -15,7 +14,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.models.holonet import ComplexHoloNet
-from src.models.ddpm_net import DDPMNet
+from src.models.ddpm_net import ComplexDDPMNet          # 复数 DDPM 网络
 from src.data.dataset import create_dataloader
 from src.optics.propagation import propagator_factory
 from src.optics.complex_utils import compl_exp
@@ -49,7 +48,6 @@ def load_model_weights(model, checkpoint_path, device):
     if not os.path.isfile(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
-    # 兼容多种保存格式
     if 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
     elif 'holonet_state_dict' in checkpoint:
@@ -69,12 +67,11 @@ def validate_stage1(holonet, val_loader, hologram_params, device):
 
     with torch.no_grad():
         for batch in val_loader:
-            rgbd = batch['rgbd'].to(device)           # (B, C, H, W)
-            amp_gt = batch['amp_4'].to(device)        # 目标振幅
+            rgbd = batch['rgbd'].to(device)
+            amp_gt = batch['amp_4'].to(device)
 
-            # 复数网络直接输出光场 (B, 3, H, W)
-            holo_out = holonet(rgbd)
-            amp_out = holo_out.abs()                  # 振幅
+            holo_out = holonet(rgbd)          # (B, 3, H, W) 复数
+            amp_out = holo_out.abs()
 
             for i in range(amp_out.size(0)):
                 ssim_val = compute_ssim(amp_out[i], amp_gt[i], data_range=1.0)
@@ -95,7 +92,8 @@ def validate_stage1(holonet, val_loader, hologram_params, device):
 
 def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_params, device):
     """
-    Stage2 验证：复数光场 -> 传播/偏移 -> DDPM（实数） -> DPM -> 孔径滤波。
+    Stage2 验证：复数 HoloNet -> padding -> 深度偏移 -> 复数 DDPM -> DPM -> 孔径滤波。
+    ddpm_net 应为 ComplexDDPMNet 实例，输入输出均为复数场。
     """
     holonet.eval()
     if ddpm_net is not None:
@@ -117,37 +115,27 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
         for batch in val_loader:
             rgbd = batch['rgbd'].to(device)
             amp_gt = batch['amp_4'].to(device)
-            phs_gt = batch['phs_4'].to(device)
-
-            # 目标振幅 padding（用于比较）
+            # 目标振幅 padding
             amp_gt_padded = F.pad(amp_gt, (pad, pad, pad, pad), mode='constant', value=0.0)
 
-            # 1. 主网络输出复数场 (B, 3, H, W)
-            holo_mid = holonet(rgbd)
+            # 1. 主网络输出复数场
+            holo_mid = holonet(rgbd)                   # (B, 3, H, W)
 
-            # 2. padding（复数直接填0）
+            # 2. padding
             if pad > 0:
                 holo_mid = F.pad(holo_mid, (pad, pad, pad, pad), mode='constant', value=0.0)
 
-            # 3. 深度偏移（复数运算）
+            # 3. 深度偏移
             holo_shifted = propagator_pad(holo_mid, depth_shift) * compl_exp(
                 -2 * np.pi * depth_shift / wavelengths)
 
-            # 4. 提取振幅/相位供 DDPM（实数网络）
-            amp_shifted = holo_shifted.abs()
-            phs_shifted = holo_shifted.angle() / (2.0 * np.pi) + 0.5
-
-            # 5. DDPM 校正
+            # 4. 复数 DDPM 校正（如果存在），直接输入复数场，输出复数场
             if ddpm_net is not None:
-                amp_phs = torch.cat([amp_shifted, phs_shifted], dim=1)
-                amp_altered, phs_altered = ddpm_net(amp_phs)
+                holo_altered = ddpm_net(holo_shifted)   # (B, 3, H, W) 复数
             else:
-                amp_altered, phs_altered = amp_shifted, phs_shifted
+                holo_altered = holo_shifted
 
-            # 6. 从实数振幅/相位构造复数场，用于 DPM 和孔径滤波
-            holo_altered = torch.polar(amp_altered, (phs_altered - 0.5) * 2.0 * np.pi)
-
-            # 7. 双相位编码 (AA-DPM)
+            # 5. 双相位编码 (AA-DPM)
             phs_only, amp_max = aadpm(
                 holo_altered,
                 propagator=propagator_pad,
@@ -166,7 +154,7 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
                 wavelength=wavelengths_np
             )
 
-            # 8. 物理孔径滤波并反向传播
+            # 6. 物理孔径滤波并反向传播
             amp_final, _ = filter_phs_only(
                 phs_only,
                 unnormalize_input=False,
@@ -183,7 +171,7 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
                 wavelength=wavelengths_np
             )
 
-            # 9. 与目标振幅比较
+            # 7. 与目标振幅比较
             for i in range(amp_final.size(0)):
                 ssim_val = compute_ssim(amp_final[i], amp_gt_padded[i], data_range=1.0)
                 psnr_val = compute_psnr(amp_final[i], amp_gt_padded[i], data_range=1.0)
@@ -237,7 +225,7 @@ def main():
         "depth_shift": args.depth_shift,
     }
 
-    # 复数主网络，输出 3 个复数通道，无需 output_dim 参数
+    # 主网络：ComplexHoloNet
     holonet = ComplexHoloNet(
         input_dim=4,
         num_layers=args.num_layers,
@@ -249,10 +237,11 @@ def main():
     ).to(device)
     load_model_weights(holonet, args.ckpt_path, device)
 
+    # 复数 DDPM 网络
     ddpm_net = None
     if args.mode == 'stage2' and args.activate_ddpm and not args.bypass_ddpm_network:
-        ddpm_net = DDPMNet(
-            input_dim=6, output_dim=6,
+        ddpm_net = ComplexDDPMNet(
+            input_dim=3, output_dim=3,          # 复数通道为 3（RGB）
             num_layers=8, num_filters_per_layer=8,
             interleave_rate=1, filter_width=3,
             bias_stddev=0.01, weight_var_scale=0.25
