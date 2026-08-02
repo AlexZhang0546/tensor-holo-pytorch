@@ -3,6 +3,10 @@
 阶段二训练脚本：DDPM 网络校正与联合微调（复数版本）。
 适配复数主网络 ComplexHoloNet 与复数 DDPM 网络 ComplexDDPMNet，
 直接处理复数全息场，移除 compl_val 构造步骤。
+
+修正：
+  - 双相位编码(aadpm)和光圈滤波(filter_phs_only)必须传入正确的phs_max参数，
+    并开启归一化/反归一化流程，否则相位数值越界导致训练崩溃。
 """
 
 import os
@@ -101,7 +105,6 @@ def build_propagator_padded(hologram_params, pad):
 def identity_loss(holo_altered: torch.Tensor, holo_shifted: torch.Tensor, loss_fn):
     """
     计算 DDPM 网络的恒等损失，要求输出复数场与输入尽可能接近。
-    同时计算振幅 SSIM 以监控。
     """
     loss_real = loss_fn(holo_altered.real, holo_shifted.real)
     loss_imag = loss_fn(holo_altered.imag, holo_shifted.imag)
@@ -109,13 +112,12 @@ def identity_loss(holo_altered: torch.Tensor, holo_shifted: torch.Tensor, loss_f
 
     amp_altered = torch.abs(holo_altered)
     amp_shifted = torch.abs(holo_shifted)
-    # 注意：原代码振幅范围可能是 [0, √2]，但 SSIM 使用 data_range=1.0，保持一致
     ssim_amp = compute_ssim(amp_altered, amp_shifted, data_range=1.0)
     return total, ssim_amp
 
 
 # ----------------------------------------------------------------------
-# 完整前向传播与损失计算（训练/验证复用，复数版本）
+# 完整前向传播与损失计算（联合训练/验证复用，复数版本）
 # ----------------------------------------------------------------------
 def _run_stage2_forward(
     rgbd, amp_gt, phs_gt,
@@ -125,8 +127,11 @@ def _run_stage2_forward(
     bypass_ddpm=False
 ):
     """
-    执行 stage2 完整前向传播，所有网络输出均为复数场，不再通过 amp, phs 构造。
-    返回总损失与各项指标。
+    执行 stage2 完整前向传播，所有网络输出均为复数场。
+    
+    修正说明：
+      双相位编码(aadpm)和光圈滤波(filter_phs_only)现在接收正确的phs_max，
+      并启用归一化/反归一化流程，避免相位值域越界。
     """
     device = rgbd.device
     wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
@@ -151,7 +156,11 @@ def _run_stage2_forward(
         holo_altered = holo_shifted
         phs_for_reg = None
 
-    # 5. 双相位编码 (AA-DPM) ，直接传入复数场
+    # ----- 关键修复：获取相位最大值并传递给后续模块 -----
+    # 默认三个通道均为 2π，与 evaluate.py 保持一致
+    phs_max = loss_params.get('phs_max', [2.0 * np.pi] * 3)
+
+    # 5. 双相位编码 (AA-DPM)，现在传入 phs_max 并开启 normalize
     phs_only, amp_max = aadpm(
         holo_altered,
         propagator=propagator_pad,
@@ -163,18 +172,18 @@ def _run_stage2_forward(
         res_w=holo_altered.shape[3],
         sigma=0.0,
         kernel_width=3,
-        phs_max=None,
+        phs_max=phs_max,            # ← 修复：传入相位最大值
         amp_max=None,
         clamp=True,
-        normalize=False,
+        normalize=True,             # ← 修复：归一化到 [0,1]
         wavelength=hologram_params['wavelengths']
     )
 
     # 6. 物理光圈滤波并反向传播回 midpoint
     amp_final, phs_final = filter_phs_only(
         phs_only,
-        unnormalize_input=False,
-        normalize_output=False,
+        unnormalize_input=True,     # ← 修复：将 [0,1] 还原为弧度
+        normalize_output=False,     # 输出保持弧度，便于构造复数场
         propagator=propagator_pad,
         depth_shift=-depth_shift,
         batch=rgbd.size(0),
@@ -182,16 +191,16 @@ def _run_stage2_forward(
         res_h=holo_altered.shape[2],
         res_w=holo_altered.shape[3],
         radius=None,
-        phs_max=None,
+        phs_max=phs_max,            # ← 修复：传入相位最大值
         amp_max=amp_max,
         wavelength=hologram_params['wavelengths']
     )
 
-    # 7. 目标全息图构造并 padding（目标仍为 amp/phs，需构造一次复数场）
+    # 7. 目标全息图构造并 padding
     holo_gt = compl_val(amp_gt, (phs_gt - 0.5) * 2.0 * np.pi)
     holo_gt_padded = complex_pad(holo_gt, pad)
 
-    # 8. 焦栈损失（需要复数输入，将最终振幅/相位构造为复数场）
+    # 8. 焦栈损失（将最终振幅/相位构造为复数场）
     holo_out = compl_val(amp_final, phs_final)
     fs_loss, fs_tv, ssim_img, psnr_img = compute_focal_stack_loss(
         holo_out, holo_gt_padded, rgbd, propagator_pad,
@@ -338,7 +347,6 @@ def train_stage2(
             epoch_ssim = 0.0
             for batch_idx, batch_data in enumerate(train_loader):
                 rgbd = batch_data['rgbd'].to(device)
-                # 对于恒等预训练，目标全息图不直接使用，只需要 rgbd 生成 holo_shifted
                 with torch.no_grad():
                     holo_mid = holonet(rgbd)
                 holo_mid_padded = complex_pad(holo_mid, pad)
@@ -346,7 +354,6 @@ def train_stage2(
                 holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
                                compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
 
-                # DDPM 网络直接处理复数场
                 holo_altered = ddpm_net(holo_shifted)
 
                 total_loss, ssim_amp = identity_loss(holo_altered, holo_shifted, loss_fn)
@@ -402,7 +409,7 @@ def train_stage2(
             amp_gt = batch_data['amp_4'].to(device)
             phs_gt = batch_data['phs_4'].to(device)
 
-            # 使用统一前向函数
+            # 使用修复后的前向函数
             outputs = _run_stage2_forward(
                 rgbd, amp_gt, phs_gt,
                 holonet, ddpm_net,
@@ -442,8 +449,7 @@ def train_stage2(
                     ddpm_net.eval()
 
                 val_stats = {'loss': 0.0, 'fs_loss': 0.0, 'fs_tv': 0.0,
-                             'ssim_amp': 0.0, 'ssim_img': 0.0, 'mean_loss': 0.0, 'std_loss': 0.0,
-                             'psnr_amp': 0.0, 'psnr_img': 0.0}
+                             'ssim_amp': 0.0, 'ssim_img': 0.0, 'mean_loss': 0.0, 'std_loss': 0.0}
                 num_val_batches = 0
                 with torch.no_grad():
                     for val_batch in val_loader:
@@ -467,8 +473,7 @@ def train_stage2(
 
                 print(f"--- Validation at step {global_step} ---")
                 print(f"Loss: {val_stats['loss']:.6f} | FS: {val_stats['fs_loss']:.6f} | TV: {val_stats['fs_tv']:.6f} | "
-                      f"SSIM_amp: {val_stats['ssim_amp']:.4f} | PSNR_amp: {val_stats['psnr_amp']:.2f} | "
-                      f"SSIM_img: {val_stats['ssim_img']:.4f} | PSNR_img: {val_stats['psnr_img']:.2f}")
+                      f"SSIM_amp: {val_stats['ssim_amp']:.4f} | SSIM_img: {val_stats['ssim_img']:.4f}")
                 if not bypass_ddpm and ddpm_net is not None:
                     print(f"Mean: {val_stats['mean_loss']:.6f} | Std: {val_stats['std_loss']:.6f}")
 
@@ -536,7 +541,7 @@ def main():
         "padding": args.padding,
     }
 
-    # 复数主网络参数（移除 output_dim，复数网络固定输出3通道复数场）
+    # 复数主网络参数
     model_params = {
         "input_dim": 4,
         "num_layers": args.num_layers,
@@ -547,7 +552,7 @@ def main():
         "weight_var_scale": 0.25
     }
 
-    # 复数 DDPM 网络参数（输入/输出均为3通道复数）
+    # 复数 DDPM 网络参数
     ddpm_params = {
         "input_dim": 3,
         "output_dim": 3,
@@ -559,6 +564,7 @@ def main():
         "weight_var_scale": 0.25
     }
 
+    # 损失参数（包含phs_max，传递给前向函数中的光学模块）
     loss_params = {
         "loss_type": "l1",
         "weight_holo": 1.0,
@@ -566,7 +572,7 @@ def main():
         "weight_fs_tv": float(training_params["num_top_depth_for_img_loss"] + training_params["num_random_depth_for_img_loss"]),
         "weight_std": 0.02,
         "weight_mean": 0.03,
-        "phs_max": [2 * np.pi, 2 * np.pi, 2 * np.pi]
+        "phs_max": [2 * np.pi, 2 * np.pi, 2 * np.pi]   # 关键：相位最大值
     }
 
     labels = ["amp_4", "phs_4", "img_0", "depth_0"]
