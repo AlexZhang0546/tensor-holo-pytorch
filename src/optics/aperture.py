@@ -2,6 +2,10 @@
 物理光圈滤波（替代 tf_filter_phs_only）
 模拟 SLM 或光学系统的低通特性：将相位全息图转为复数场，在频域乘以圆形孔径掩模，
 再传播回原深度。
+
+修复说明：
+  适配 dpm.py 返回的逐样本/逐通道振幅最大值 amp_max，其形状为 (B, C, 1, 1) 的张量，
+  避免 amp_max.item() 引发的尺寸错误；同时兼容旧版的标量/None 输入。
 """
 
 import torch
@@ -43,7 +47,7 @@ def filter_phs_only(phs_only: torch.Tensor,
                     res_w: int = 384,
                     radius: int = None,
                     phs_max: list = None,
-                    amp_max: float = 1.0,
+                    amp_max = None,
                     wavelength: list = None) -> tuple:
     """
     模拟物理孔径的低通滤波。
@@ -57,6 +61,8 @@ def filter_phs_only(phs_only: torch.Tensor,
         radius: 频域孔径半径；若为 None，则取 min(H, W)/2。
         phs_max: 每个通道的最大相位弧度（用于反归一化/归一化）。
         amp_max: 用于构造复数场的振幅。
+                 可以是标量、形状 (B, C, 1, 1) 的张量（来自 dpm 模块），
+                 或 None（默认使用全 1）。
     
     Returns:
         amp_filtered: 滤波后的振幅 (B, C, H, W)
@@ -71,8 +77,16 @@ def filter_phs_only(phs_only: torch.Tensor,
         # 注意：原代码中 unnormalize_input 时执行 (phs_only - 0.5) * phs_max，这里假设输入已居中在 0.5 附近
         phs_only = (phs_only - 0.5) * phs_max_tensor
 
-    # 构造复数场（振幅恒为 1，但乘以 amp_max）
-    amp_tensor = torch.full_like(phs_only, amp_max.item() if torch.is_tensor(amp_max) else amp_max)
+    # ---- 构造复数场：振幅由 amp_max 决定 ----
+    if amp_max is None:
+        amp_tensor = torch.ones_like(phs_only)
+    elif torch.is_tensor(amp_max):
+        # amp_max 形状 (B, C, 1, 1) 或可广播的形状，扩展至 (B, C, H, W)
+        amp_tensor = amp_max.expand_as(phs_only)
+    else:
+        # 标量
+        amp_tensor = torch.full_like(phs_only, amp_max)
+
     cpx = compl_val(amp_tensor, phs_only)
 
     # ---- 频域滤波 ----
