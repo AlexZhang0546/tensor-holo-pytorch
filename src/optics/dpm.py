@@ -3,9 +3,13 @@
   - AADPM (Anti-Aliasing DPM, 预模糊 + 棋盘排列)
   - BL-DPM (Band-Limited DPM, 频域滤波)
   - DPM-Maimone (原始 DPM，行/列压缩)
-  
+
 包含相位包裹辅助函数 _wrap_phase 以及自定义高斯模糊工具 _gaussian_blur_2d。
 所有函数均为纯 PyTorch 实现，支持可微分训练和推理。
+
+修复说明：
+  将全局振幅归一化 amp.max() 改为逐样本、逐通道的空间最大值 amp.amax(dim=(2,3), keepdim=True)，
+  避免梯度截断和跨样本干扰，确保 stage2 joint 训练正常。
 """
 
 import torch
@@ -123,7 +127,7 @@ def dpm_maimone(cpx: torch.Tensor,
                 res_w: int = 384,
                 axis: int = 2,          # 2: 丢弃行方向的像素，3: 丢弃列方向
                 phs_max: list = None,
-                amp_max: float = None,
+                amp_max = None,
                 clamp: bool = False,
                 normalize: bool = True,
                 wavelength: list = None) -> torch.Tensor:
@@ -132,7 +136,7 @@ def dpm_maimone(cpx: torch.Tensor,
     
     Returns:
         phs_only: 相位图，若 normalize=True 则归一化到 [0, 1]，否则单位为弧度。
-        amp_max:  用于归一化的最大振幅（在滤波步骤中可能用到）。
+        amp_max:  用于归一化的最大振幅（每个样本、每个通道独立），形状 (B, C, 1, 1)。
     """
     # ---- 深度偏移 ----
     if depth_shift != 0.0:
@@ -144,9 +148,9 @@ def dpm_maimone(cpx: torch.Tensor,
     amp = torch.abs(cpx)
     phs = torch.angle(cpx)
 
-    # ---- 振幅归一化 ----
+    # ---- 振幅归一化：改为逐样本、逐通道的最大值 ----
     if amp_max is None:
-        amp_max = amp.max() + 1e-6
+        amp_max = amp.amax(dim=(2, 3), keepdim=True) + 1e-6   # (B, C, 1, 1)
     amp = amp / amp_max
     if clamp:
         amp = torch.clamp(amp, max=1.0 - 1e-6)
@@ -211,12 +215,13 @@ def bldpm(cpx: torch.Tensor,
           res_w: int = 384,
           k: float = 0.5,
           phs_max: list = None,
-          amp_max: float = None,
+          amp_max = None,
           clamp: bool = False,
           normalize: bool = True,
           wavelength: list = None) -> torch.Tensor:
     """
     Band-Limited DPM [Sui et al. 2021]: 在频率域用方形/菱形 mask 滤波后，再进行 DPM。
+    同样修复振幅归一化方式。
     """
     # ---- 生成频域 mask ----
     y = torch.arange(-(res_h // 2), res_h // 2, device=cpx.device, dtype=cpx.real.dtype)
@@ -251,9 +256,9 @@ def bldpm(cpx: torch.Tensor,
     amp = torch.abs(cpx)
     phs = torch.angle(cpx)
 
-    # ---- 振幅归一化 ----
+    # ---- 振幅归一化：改为逐样本、逐通道的最大值 ----
     if amp_max is None:
-        amp_max = amp.max() + 1e-6
+        amp_max = amp.amax(dim=(2, 3), keepdim=True) + 1e-6   # (B, C, 1, 1)
     amp = amp / amp_max
     if clamp:
         amp = torch.clamp(amp, max=1.0 - 1e-6)
@@ -300,12 +305,13 @@ def aadpm(cpx: torch.Tensor,
           sigma: float = 0.5,
           kernel_width: int = 5,
           phs_max: list = None,
-          amp_max: float = None,
+          amp_max = None,
           clamp: bool = False,
           normalize: bool = True,
           wavelength: list = None) -> torch.Tensor:
     """
     Anti-Aliasing DPM: 在双相位分解前对复数场进行预模糊，以减弱混叠。
+    同样修复振幅归一化方式。
     """
     # ---- 深度偏移 ----
     if depth_shift != 0.0:
@@ -323,9 +329,9 @@ def aadpm(cpx: torch.Tensor,
     amp = torch.abs(cpx)
     phs = torch.angle(cpx)
 
-    # ---- 振幅归一化 ----
+    # ---- 振幅归一化：改为逐样本、逐通道的最大值 ----
     if amp_max is None:
-        amp_max = amp.max() + 1e-6
+        amp_max = amp.amax(dim=(2, 3), keepdim=True) + 1e-6   # (B, C, 1, 1)
     amp = amp / amp_max
     if clamp:
         amp = torch.clamp(amp, max=1.0 - 1e-6)
