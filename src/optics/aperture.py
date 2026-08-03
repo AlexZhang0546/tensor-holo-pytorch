@@ -95,6 +95,7 @@ def filter_phs_only(phs_only: torch.Tensor,
                        device=cpx.device, dtype=cpx.dtype)
     cpx_fft_filtered = cpx_fft * mask
     cpx_filtered = ifft2d(ifftshift2d(cpx_fft_filtered))
+    cpx_filtered = cpx_filtered / (res_h * res_w)
 
     # ---- 反向传播 ----
     if depth_shift != 0.0:
