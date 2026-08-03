@@ -172,17 +172,17 @@ def _run_stage2_forward(
         res_w=holo_altered.shape[3],
         sigma=0.0,
         kernel_width=3,
-        phs_max=phs_max,            # ← 修复：传入相位最大值
+        phs_max=None,
         amp_max=None,
         clamp=True,
-        normalize=True,             # ← 修复：归一化到 [0,1]
+        normalize=False,
         wavelength=hologram_params['wavelengths']
     )
 
     # 6. 物理光圈滤波并反向传播回 midpoint
     amp_final, phs_final = filter_phs_only(
         phs_only,
-        unnormalize_input=True,     # ← 修复：将 [0,1] 还原为弧度
+        unnormalize_input=False,
         normalize_output=False,     # 输出保持弧度，便于构造复数场
         propagator=propagator_pad,
         depth_shift=-depth_shift,
@@ -191,7 +191,7 @@ def _run_stage2_forward(
         res_h=holo_altered.shape[2],
         res_w=holo_altered.shape[3],
         radius=None,
-        phs_max=phs_max,            # ← 修复：传入相位最大值
+        phs_max=None,
         amp_max=amp_max,
         wavelength=hologram_params['wavelengths']
     )
