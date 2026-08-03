@@ -481,6 +481,7 @@ def train_stage2(
                 holonet.train()
                 if ddpm_net is not None:
                     ddpm_net.train()
+                    ddpm_net.eval()
 
         # 每个 epoch 结束后保存 checkpoint
         save_dict = {
