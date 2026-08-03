@@ -133,20 +133,20 @@ def evaluate(args):
             weight_var_scale=0.25
         ).to(device)
         if args.ddpm_ckpt_path:
-        ddpm_checkpoint = torch.load(args.ddpm_ckpt_path, map_location=device)
-        if 'ddpm_net_state_dict' in ddpm_checkpoint:
-            ddpm_net.load_state_dict(ddpm_checkpoint['ddpm_net_state_dict'])
-            print("DDPM weights loaded from separate checkpoint.")
+            ddpm_checkpoint = torch.load(args.ddpm_ckpt_path, map_location=device)
+            if 'ddpm_net_state_dict' in ddpm_checkpoint:
+                ddpm_net.load_state_dict(ddpm_checkpoint['ddpm_net_state_dict'])
+                print("DDPM weights loaded from separate checkpoint.")
+            else:
+                # 兼容旧格式，直接作为 state_dict 加载
+                ddpm_net.load_state_dict(ddpm_checkpoint)
         else:
-            # 兼容旧格式，直接作为 state_dict 加载
-            ddpm_net.load_state_dict(ddpm_checkpoint)
-    else:
-        checkpoint = torch.load(args.ckpt_path, map_location=device)
-        if 'ddpm_net_state_dict' in checkpoint:
-            ddpm_net.load_state_dict(checkpoint['ddpm_net_state_dict'])
-            print("DDPM weights loaded from main checkpoint.")
-        else:
-            raise ValueError("DDPM weights not found. Provide --ddpm-ckpt-path.")
+            checkpoint = torch.load(args.ckpt_path, map_location=device)
+            if 'ddpm_net_state_dict' in checkpoint:
+                ddpm_net.load_state_dict(checkpoint['ddpm_net_state_dict'])
+                print("DDPM weights loaded from main checkpoint.")
+            else:
+                raise ValueError("DDPM weights not found. Provide --ddpm-ckpt-path.")
 
     holonet.eval()
     if ddpm_net is not None:
