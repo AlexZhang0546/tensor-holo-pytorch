@@ -173,10 +173,10 @@ def _run_stage2_forward(
         res_w=holo_altered.shape[3],
         sigma=0.0,
         kernel_width=3,
-        phs_max=None,
+        phs_max=phs_max,
         amp_max=None,
         clamp=True,
-        normalize=False,
+        normalize=True,
         wavelength=hologram_params['wavelengths']
     )
 
