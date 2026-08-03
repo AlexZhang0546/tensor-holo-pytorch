@@ -127,7 +127,8 @@ class ComplexDDPMNet(nn.Module):
         # 现在形状为 (B, 3, H, W)
 
         # 5. 直接返回复数场，不做额外的振幅/相位分离
-        return field_complex
+        # 核心修正：将其作为残差叠加到原始输入上，网络仅学习物理光场的微小修正量
+        return x + field_complex
 
 
 # ---------- 保留旧版 DDPMNet（可选，以便兼容未改造部分） ----------
