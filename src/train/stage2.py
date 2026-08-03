@@ -143,8 +143,9 @@ def _run_stage2_forward(
     holo_mid_padded = complex_pad(holo_mid, pad)
 
     # 3. 深度偏移
-    holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
-                   compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
+    # holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
+    #                compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
+    holo_shifted = holo_mid_padded
 
 
     # 4. DDPM 校正或 bypass
