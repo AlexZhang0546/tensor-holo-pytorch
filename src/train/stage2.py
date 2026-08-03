@@ -146,6 +146,12 @@ def _run_stage2_forward(
     holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
                    compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
 
+    with torch.no_grad():
+        amp_altered = holo_altered.abs()
+        amp_gt_pad = F.pad(amp_gt, (pad,pad,pad,pad), mode='constant', value=0.0)
+        ssim_before = compute_ssim(amp_altered, amp_gt_pad, data_range=1.0)
+        print(f"[DEBUG] SSIM BEFORE DPM: {ssim_before:.4f}")
+
     # 4. DDPM 校正或 bypass
     if ddpm_net is not None and not bypass_ddpm:
         # 复数 DDPM 网络直接接收复数场
