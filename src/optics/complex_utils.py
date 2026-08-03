@@ -65,7 +65,7 @@ def fft2d(x: torch.Tensor, dim: tuple = (-2, -1)) -> torch.Tensor:
     """
     if not x.is_complex():
         x = torch.complex(x, torch.zeros_like(x))
-    return torch.fft.fft2(x, dim=dim)
+    return torch.fft.fft2(x, dim=dim, norm='ortho')
 
 
 def ifft2d(x: torch.Tensor, dim: tuple = (-2, -1)) -> torch.Tensor:
@@ -82,7 +82,7 @@ def ifft2d(x: torch.Tensor, dim: tuple = (-2, -1)) -> torch.Tensor:
     """
     if not x.is_complex():
         x = torch.complex(x, torch.zeros_like(x))
-    return torch.fft.ifft2(x, dim=dim)
+    return torch.fft.ifft2(x, dim=dim, norm='ortho')
 
 
 # ----------------------------------------------------------------------
