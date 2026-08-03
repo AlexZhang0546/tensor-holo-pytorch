@@ -245,10 +245,10 @@ def evaluate(args):
     amp_out = torch.abs(complex_field)
     phs_out = torch.angle(complex_field) / (2.0 * np.pi) + 0.5
 
-    amp_out_np = amp_out.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)[::-1, :, :]
-    phs_out_np = phs_out.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)[::-1, :, :]
-    phs_only_np = phs_only.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)[::-1, :, :]
-    amp_final_np = amp_final.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)[::-1, :, :]
+    amp_out_np = amp_out.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
+    phs_out_np = phs_out.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
+    phs_only_np = phs_only.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
+    amp_final_np = amp_final.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
 
     os.makedirs(args.eval_output_path, exist_ok=True)
 
