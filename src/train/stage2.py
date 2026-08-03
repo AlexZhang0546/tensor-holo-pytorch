@@ -126,18 +126,11 @@ def _run_stage2_forward(
     hologram_params, training_params, loss_params, loss_fn,
     bypass_ddpm=False
 ):
-    """
-    执行 stage2 完整前向传播，所有网络输出均为复数场。
-    
-    修正说明：
-      双相位编码(aadpm)和光圈滤波(filter_phs_only)现在接收正确的phs_max，
-      并启用归一化/反归一化流程，避免相位值域越界。
-    """
     device = rgbd.device
     wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
 
-    # 1. 主网络输出复数全息场 (B, 3, H, W)
-    holo_mid = holonet(rgbd)  # 复数
+    # 1. 主网络输出复数场
+    holo_mid = holonet(rgbd)
 
     # 2. padding
     holo_mid_padded = complex_pad(holo_mid, pad)
@@ -145,77 +138,25 @@ def _run_stage2_forward(
     # 3. 深度偏移
     holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
                    compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
-    
-    # ---- 临时调试：绕过 DDPM 和深度偏移，直接测试 DPM ----
-    holo_altered = holo_mid_padded       # 直接用主网络输出，不做深度偏移
-    phs_max = loss_params.get('phs_max', [2.0 * np.pi] * 3)
 
-    print("========== DEBUG DPM PIPELINE ==========")
-    amp_in = holo_altered.abs()
-    print(f"[INPUT] amp_in: min={amp_in.min().item():.6f}, max={amp_in.max().item():.6f}")
-    print(f"[INPUT] phs_in: min={holo_altered.angle().min().item():.6f}, max={holo_altered.angle().max().item():.6f}")
-
-    phs_only, amp_max = aadpm(
-        holo_altered,
-        propagator=propagator_pad,
-        depth_shift=0.0,
-        adaptive_phs_shift=False,
-        batch=rgbd.size(0),
-        num_channels=3,
-        res_h=holo_altered.shape[2],
-        res_w=holo_altered.shape[3],
-        sigma=0.0,
-        kernel_width=3,
-        phs_max=phs_max,
-        amp_max=None,
-        clamp=True,
-        normalize=True,          # 输出 [0,1] 归一化相位
-        wavelength=hologram_params['wavelengths']
-    )
-
-    print(f"[DPM] phs_only: min={phs_only.min().item():.6f}, max={phs_only.max().item():.6f}")
-    print(f"[DPM] amp_max shape: {amp_max.shape}, sample values: {amp_max.flatten()[:3].detach().cpu().numpy()}")
-
-    amp_final, phs_final = filter_phs_only(
-        phs_only,
-        unnormalize_input=True,    # 反归一化到弧度
-        normalize_output=False,    # 输出弧度
-        propagator=propagator_pad,
-        depth_shift=-depth_shift,  # 即使为0也无妨
-        batch=rgbd.size(0),
-        num_channels=3,
-        res_h=holo_altered.shape[2],
-        res_w=holo_altered.shape[3],
-        radius=None,
-        phs_max=phs_max,
-        amp_max=amp_max,
-        wavelength=hologram_params['wavelengths']
-    )
-
-    print(f"[FILTER] amp_final: min={amp_final.min().item():.6f}, max={amp_final.max().item():.6f}")
-    amp_gt_padded = F.pad(amp_gt, (pad, pad, pad, pad), mode='constant', value=0.0)
-    ssim_now = compute_ssim(amp_final, amp_gt_padded, data_range=1.0)
-    print(f"[FILTER] SSIM after filter: {ssim_now:.4f}")
-
-    # 继续用 amp_final 构造复数场以计算损失（保持你原来的后续流程）
-    holo_out = compl_val(amp_final, phs_final)
-
-"""
     # 4. DDPM 校正或 bypass
     if ddpm_net is not None and not bypass_ddpm:
-        # 复数 DDPM 网络直接接收复数场
         holo_altered = ddpm_net(holo_shifted)
-        # 提取相位用于正则（转为 [0,1] 归一化相位）
         phs_for_reg = torch.angle(holo_altered) / (2.0 * np.pi) + 0.5
     else:
         holo_altered = holo_shifted
         phs_for_reg = None
 
-    # ----- 关键修复：获取相位最大值并传递给后续模块 -----
-    # 默认三个通道均为 2π，与 evaluate.py 保持一致
+    # 5. 获取 phs_max
     phs_max = loss_params.get('phs_max', [2.0 * np.pi] * 3)
 
-    # 5. 双相位编码 (AA-DPM)，现在传入 phs_max 并开启 normalize
+    # ---- 调试打印：DPM 输入 ----
+    print("========== DEBUG DPM PIPELINE ==========")
+    amp_in = holo_altered.abs()
+    print(f"[INPUT] amp_in: min={amp_in.min().item():.6f}, max={amp_in.max().item():.6f}")
+    print(f"[INPUT] phs_in: min={holo_altered.angle().min().item():.6f}, max={holo_altered.angle().max().item():.6f}")
+
+    # 6. 双相位编码
     phs_only, amp_max = aadpm(
         holo_altered,
         propagator=propagator_pad,
@@ -234,11 +175,14 @@ def _run_stage2_forward(
         wavelength=hologram_params['wavelengths']
     )
 
-    # 6. 物理光圈滤波并反向传播回 midpoint
+    print(f"[DPM] phs_only: min={phs_only.min().item():.6f}, max={phs_only.max().item():.6f}")
+    print(f"[DPM] amp_max shape: {amp_max.shape}, values: {amp_max.flatten()[:3].detach().cpu().numpy()}")
+
+    # 7. 光圈滤波并反向传播
     amp_final, phs_final = filter_phs_only(
         phs_only,
-        unnormalize_input=False,
-        normalize_output=True,     # 输出保持弧度，便于构造复数场
+        unnormalize_input=True,
+        normalize_output=False,
         propagator=propagator_pad,
         depth_shift=-depth_shift,
         batch=rgbd.size(0),
@@ -251,24 +195,30 @@ def _run_stage2_forward(
         wavelength=hologram_params['wavelengths']
     )
 
-    # 7. 目标全息图构造并 padding
+    print(f"[FILTER] amp_final: min={amp_final.min().item():.6f}, max={amp_final.max().item():.6f}")
+    amp_gt_padded = F.pad(amp_gt, (pad, pad, pad, pad), mode='constant', value=0.0)
+    ssim_after = compute_ssim(amp_final, amp_gt_padded, data_range=1.0)
+    print(f"[FILTER] SSIM after filter: {ssim_after:.4f}")
+    print("==========================================\n")
+
+    # 8. 构造复数场
+    holo_out = compl_val(amp_final, phs_final)
     holo_gt = compl_val(amp_gt, (phs_gt - 0.5) * 2.0 * np.pi)
     holo_gt_padded = complex_pad(holo_gt, pad)
 
-    # 8. 焦栈损失（将最终振幅/相位构造为复数场）
-    holo_out = compl_val(amp_final, phs_final)
+    # 9. 焦栈损失
     fs_loss, fs_tv, ssim_img, psnr_img = compute_focal_stack_loss(
         holo_out, holo_gt_padded, rgbd, propagator_pad,
         hologram_params, training_params, loss_fn, pad=pad
     )
-"""
-    # 9. 振幅图 SSIM/PSNR（裁剪有效区域后与目标振幅比较）
+
+    # 10. 振幅图 SSIM/PSNR（裁剪有效区域）
     amp_crop = amp_final[:, :, pad:pad + hologram_params['res_h'], pad:pad + hologram_params['res_w']]
     amp_gt_crop = amp_gt[:, :, pad:pad + hologram_params['res_h'], pad:pad + hologram_params['res_w']]
     ssim_amp = compute_ssim(amp_crop, amp_gt_crop, data_range=1.0)
     psnr_amp = compute_psnr(amp_crop, amp_gt_crop, data_range=1.0)
 
-    # 10. 组合总损失
+    # 11. 组合总损失
     w_fs = loss_params.get('weight_fs', 1.0)
     w_fs_tv = loss_params.get('weight_fs_tv', 1.0)
     total_loss = w_fs * fs_loss + w_fs_tv * fs_tv
