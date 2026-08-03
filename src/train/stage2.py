@@ -139,6 +139,11 @@ def _run_stage2_forward(
     # 1. 主网络输出复数全息场 (B, 3, H, W)
     holo_mid = holonet(rgbd)  # 复数
 
+    with torch.no_grad():
+        amp_mid = holo_mid.abs()
+        ssim_mid = compute_ssim(amp_mid, amp_gt, data_range=1.0)
+        print(f"[DEBUG] HoloNet output SSIM: {ssim_mid:.4f}")
+
     # 2. padding
     holo_mid_padded = complex_pad(holo_mid, pad)
 
@@ -157,11 +162,6 @@ def _run_stage2_forward(
         holo_altered = holo_shifted
         phs_for_reg = None
 
-    with torch.no_grad():
-        amp_altered = holo_altered.abs()
-        amp_gt_pad = F.pad(amp_gt, (pad,pad,pad,pad), mode='constant', value=0.0)
-        ssim_before = compute_ssim(amp_altered, amp_gt_pad, data_range=1.0)
-        print(f"[DEBUG] SSIM BEFORE DPM: {ssim_before:.4f}")
     # ----- 关键修复：获取相位最大值并传递给后续模块 -----
     # 默认三个通道均为 2π，与 evaluate.py 保持一致
     phs_max = loss_params.get('phs_max', [2.0 * np.pi] * 3)
