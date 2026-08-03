@@ -103,7 +103,8 @@ class ComplexBatchNorm2d(nn.Module):
 
         # 协方差矩阵的逆平方根元素计算
         det = V_rr * V_ii - V_ri * V_ri
-        s = torch.sqrt(det) + self.eps
+        # 增加 clamp 避免浮点精度误差导致 det < 0 从而产生 NaN
+        s = torch.sqrt(torch.clamp(det, min=0.0)) + self.eps
         trace = V_rr + V_ii
         t = torch.sqrt(trace + 2.0 * s) * s
 
