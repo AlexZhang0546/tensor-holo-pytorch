@@ -139,11 +139,6 @@ def _run_stage2_forward(
     # 1. 主网络输出复数全息场 (B, 3, H, W)
     holo_mid = holonet(rgbd)  # 复数
 
-    with torch.no_grad():
-        amp_mid = holo_mid.abs()
-        ssim_mid = compute_ssim(amp_mid, amp_gt, data_range=1.0)
-        print(f"[DEBUG] HoloNet output SSIM: {ssim_mid:.4f}")
-
     # 2. padding
     holo_mid_padded = complex_pad(holo_mid, pad)
 
