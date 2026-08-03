@@ -145,8 +145,62 @@ def _run_stage2_forward(
     # 3. 深度偏移
     holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
                    compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
+    
+    # ---- 临时调试：绕过 DDPM 和深度偏移，直接测试 DPM ----
+    holo_altered = holo_mid_padded       # 直接用主网络输出，不做深度偏移
+    phs_max = loss_params.get('phs_max', [2.0 * np.pi] * 3)
 
+    print("========== DEBUG DPM PIPELINE ==========")
+    amp_in = holo_altered.abs()
+    print(f"[INPUT] amp_in: min={amp_in.min().item():.6f}, max={amp_in.max().item():.6f}")
+    print(f"[INPUT] phs_in: min={holo_altered.angle().min().item():.6f}, max={holo_altered.angle().max().item():.6f}")
 
+    phs_only, amp_max = aadpm(
+        holo_altered,
+        propagator=propagator_pad,
+        depth_shift=0.0,
+        adaptive_phs_shift=False,
+        batch=rgbd.size(0),
+        num_channels=3,
+        res_h=holo_altered.shape[2],
+        res_w=holo_altered.shape[3],
+        sigma=0.0,
+        kernel_width=3,
+        phs_max=phs_max,
+        amp_max=None,
+        clamp=True,
+        normalize=True,          # 输出 [0,1] 归一化相位
+        wavelength=hologram_params['wavelengths']
+    )
+
+    print(f"[DPM] phs_only: min={phs_only.min().item():.6f}, max={phs_only.max().item():.6f}")
+    print(f"[DPM] amp_max shape: {amp_max.shape}, sample values: {amp_max.flatten()[:3].detach().cpu().numpy()}")
+
+    amp_final, phs_final = filter_phs_only(
+        phs_only,
+        unnormalize_input=True,    # 反归一化到弧度
+        normalize_output=False,    # 输出弧度
+        propagator=propagator_pad,
+        depth_shift=-depth_shift,  # 即使为0也无妨
+        batch=rgbd.size(0),
+        num_channels=3,
+        res_h=holo_altered.shape[2],
+        res_w=holo_altered.shape[3],
+        radius=None,
+        phs_max=phs_max,
+        amp_max=amp_max,
+        wavelength=hologram_params['wavelengths']
+    )
+
+    print(f"[FILTER] amp_final: min={amp_final.min().item():.6f}, max={amp_final.max().item():.6f}")
+    amp_gt_padded = F.pad(amp_gt, (pad, pad, pad, pad), mode='constant', value=0.0)
+    ssim_now = compute_ssim(amp_final, amp_gt_padded, data_range=1.0)
+    print(f"[FILTER] SSIM after filter: {ssim_now:.4f}")
+
+    # 继续用 amp_final 构造复数场以计算损失（保持你原来的后续流程）
+    holo_out = compl_val(amp_final, phs_final)
+
+"""
     # 4. DDPM 校正或 bypass
     if ddpm_net is not None and not bypass_ddpm:
         # 复数 DDPM 网络直接接收复数场
@@ -207,7 +261,7 @@ def _run_stage2_forward(
         holo_out, holo_gt_padded, rgbd, propagator_pad,
         hologram_params, training_params, loss_fn, pad=pad
     )
-
+"""
     # 9. 振幅图 SSIM/PSNR（裁剪有效区域后与目标振幅比较）
     amp_crop = amp_final[:, :, pad:pad + hologram_params['res_h'], pad:pad + hologram_params['res_w']]
     amp_gt_crop = amp_gt[:, :, pad:pad + hologram_params['res_h'], pad:pad + hologram_params['res_w']]
