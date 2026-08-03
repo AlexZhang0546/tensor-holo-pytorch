@@ -331,7 +331,7 @@ def aadpm(cpx: torch.Tensor,
 
     # ---- 振幅归一化：改为逐样本、逐通道的最大值 ----
     if amp_max is None:
-        amp_max = amp.amax(dim=(2, 3), keepdim=True) + 1e-6   # (B, C, 1, 1)
+        amp_max = tf.reduce_max(amp) + 1e-6   # (B, C, 1, 1)
     amp = amp / amp_max
     if clamp:
         amp = torch.clamp(amp, max=1.0 - 1e-6)
