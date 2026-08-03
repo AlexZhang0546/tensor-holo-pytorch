@@ -67,7 +67,7 @@ class ComplexDDPMNet(nn.Module):
             bn = ComplexBatchNorm2d(out_dim_list[i])
             if is_last:
                 # 最后一层去掉 BN，保持纯线性，避免强制归一化破坏物理振幅尺度
-                self.layers.append(conv)
+                self.layers.append(nn.Sequential(conv, bn))
             else:
                 self.layers.append(nn.Sequential(conv, bn, ComplexReLU(out_dim_list[i])))
 
