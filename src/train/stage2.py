@@ -394,6 +394,7 @@ def train_stage2(
     holonet.train()
     if ddpm_net is not None:
         ddpm_net.train()
+        ddpm_net.eval()
 
     print("Starting joint training...")
     for epoch in range(start_epoch_joint, joint_epochs):
