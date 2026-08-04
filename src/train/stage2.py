@@ -133,7 +133,7 @@ def _run_stage2_forward(
       双相位编码(aadpm)和光圈滤波(filter_phs_only)现在接收正确的phs_max，
       并启用归一化/反归一化流程，避免相位值域越界。
     """
-    
+    print("holonet training:", holonet.training)
     device = rgbd.device
     wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
 
