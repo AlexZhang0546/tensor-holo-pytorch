@@ -126,15 +126,11 @@ def _run_stage2_forward(
     hologram_params, training_params, loss_params, loss_fn,
     bypass_ddpm=False
 ):
-    """
-    """
     执行 stage2 完整前向传播，所有网络输出均为复数场。
     
     修正说明：
       双相位编码(aadpm)和光圈滤波(filter_phs_only)现在接收正确的phs_max，
       并启用归一化/反归一化流程，避免相位值域越界。
-    """
-    """
     device = rgbd.device
     wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
 
