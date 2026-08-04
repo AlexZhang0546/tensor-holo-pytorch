@@ -196,8 +196,6 @@ def _run_stage2_forward(
         amp_max=amp_max,
         wavelength=hologram_params['wavelengths']
     )
-    # 2. 直接用 holo_shifted 作为最终输出（跳过 DDPM、DPM、滤波）
-    holo_out = holo_shifted
 
     # 7. 目标全息图构造并 padding
     holo_gt = compl_val(amp_gt, (phs_gt - 0.5) * 2.0 * np.pi)
@@ -205,6 +203,7 @@ def _run_stage2_forward(
 
     # 8. 焦栈损失（将最终振幅/相位构造为复数场）
     holo_out = compl_val(amp_final, phs_final)
+    holo_out = holo_shifted
     fs_loss, fs_tv, ssim_img, psnr_img = compute_focal_stack_loss(
         holo_out, holo_gt_padded, rgbd, propagator_pad,
         hologram_params, training_params, loss_fn, pad=pad
