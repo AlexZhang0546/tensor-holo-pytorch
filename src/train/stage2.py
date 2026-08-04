@@ -409,6 +409,8 @@ def train_stage2(
             rgbd = batch_data['rgbd'].to(device)
             amp_gt = batch_data['amp_4'].to(device)
             phs_gt = batch_data['phs_4'].to(device)
+            print("DIAG rgbd shape:", rgbd.shape, "mean:", rgbd.mean().item(), "min:", rgbd.min().item(), "max:", rgbd.max().item())
+            print("DIAG amp_gt mean:", amp_gt.mean().item(), "max:", amp_gt.max().item())
 
             # 使用修复后的前向函数
             outputs = _run_stage2_forward(
