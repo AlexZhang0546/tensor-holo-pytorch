@@ -56,7 +56,7 @@ class ComplexHoloNet(nn.Module):
 
         # ---- 构建复数层序列 ----
         self.layers = nn.ModuleList()
-                for i in range(num_layers):
+        for i in range(num_layers):
             is_last = (i == num_layers - 1)
             if is_last:
                 # 最后一层输出 6 个实数通道（3 振幅 + 3 相位）
