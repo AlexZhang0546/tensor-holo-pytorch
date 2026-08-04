@@ -115,7 +115,7 @@ def identity_loss(holo_altered: torch.Tensor, holo_shifted: torch.Tensor, loss_f
     ssim_amp = compute_ssim(amp_altered, amp_shifted, data_range=1.0)
     return total, ssim_amp
 
-"""
+
 # ----------------------------------------------------------------------
 # 完整前向传播与损失计算（联合训练/验证复用，复数版本）
 # ----------------------------------------------------------------------
@@ -126,6 +126,7 @@ def _run_stage2_forward(
     hologram_params, training_params, loss_params, loss_fn,
     bypass_ddpm=False
 ):
+    """
     执行 stage2 完整前向传播，所有网络输出均为复数场。
     
     修正说明：
@@ -133,6 +134,7 @@ def _run_stage2_forward(
       并启用归一化/反归一化流程，避免相位值域越界。
     device = rgbd.device
     wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
+    """
 
     # 1. 主网络输出复数全息场 (B, 3, H, W)
     holo_mid = holonet(rgbd)  # 复数
@@ -238,80 +240,7 @@ def _run_stage2_forward(
         'mean_loss': mean_loss,
         'std_loss': std_loss
     }
-"""
-def _run_stage2_forward(
-    rgbd, amp_gt, phs_gt,
-    holonet, ddpm_net,
-    propagator_pad, depth_shift, pad,
-    hologram_params, training_params, loss_params, loss_fn,
-    bypass_ddpm=False
-):
-    """
-    诊断版本：跳过 DPM 与滤波，输出所有中间振幅的统计与 SSIM。
-    """
-    device = rgbd.device
-    wavelengths_np = hologram_params['wavelengths']
-    wavelengths_tensor = torch.tensor(wavelengths_np, device=device).view(1, -1, 1, 1)
 
-    # ---------- 1. 主网络输出 ----------
-    holo_mid = holonet(rgbd)                            # (B,3,H,W) complex
-    amp_mid = holo_mid.abs()
-    amp_gt_original = amp_gt                           # (B,3,H,W) real, range [0, sqrt(2)]
-
-    # 主网络直接 SSIM（无 pad，无 shift）
-    ssim_mid = compute_ssim(amp_mid, amp_gt_original, data_range=1.0)
-    print(f"[DIAG] Mid-plane SSIM (no pad, no shift): {ssim_mid.item():.6f}")
-    print(f"[DIAG] amp_mid mean: {amp_mid.mean().item():.6f}, max: {amp_mid.max().item():.6f}")
-    print(f"[DIAG] amp_gt  mean: {amp_gt_original.mean().item():.6f}, max: {amp_gt_original.max().item():.6f}")
-
-    # ---------- 2. Padding ----------
-    holo_mid_padded = complex_pad(holo_mid, pad)        # 对复数场填 0（实部虚部均填0）
-    amp_mid_padded = holo_mid_padded.abs()
-    print(f"[DIAG] After pad ({pad}): amp_mid_padded mean: {amp_mid_padded.mean().item():.6f}, max: {amp_mid_padded.max().item():.6f}")
-
-    # ---------- 3. 深度偏移 ----------
-    # 传播 + 相位补偿（与原 TF 完全一致）
-    holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
-                   compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
-    amp_shifted = holo_shifted.abs()
-    print(f"[DIAG] After shift ({depth_shift} mm): amp_shifted mean: {amp_shifted.mean().item():.6f}, max: {amp_shifted.max().item():.6f}")
-
-    # ---------- 4. 目标构造并 padding ----------
-    holo_gt = compl_val(amp_gt_original, (phs_gt - 0.5) * 2.0 * np.pi)
-    holo_gt_padded = complex_pad(holo_gt, pad)
-    amp_gt_padded = holo_gt_padded.abs()
-    print(f"[DIAG] Target amp (padded) mean: {amp_gt_padded.mean().item():.6f}, max: {amp_gt_padded.max().item():.6f}")
-
-    # ---------- 5. 直接计算焦栈损失与振幅 SSIM（跳过 DDPM/DPM/滤波）----------
-    # 注意：这里直接用 holo_shifted 作为最终输出
-    fs_loss, fs_tv, ssim_img, psnr_img = compute_focal_stack_loss(
-        holo_shifted, holo_gt_padded, rgbd, propagator_pad,
-        hologram_params, training_params, loss_fn, pad=pad
-    )
-
-    # 裁剪有效区域后计算振幅 SSIM
-    res_h = hologram_params['res_h']
-    res_w = hologram_params['res_w']
-    amp_crop = holo_shifted.abs()[:, :, pad:pad+res_h, pad:pad+res_w]
-    amp_gt_crop = amp_gt_original[:, :, pad:pad+res_h, pad:pad+res_w] if pad > 0 else amp_gt_original
-    ssim_amp = compute_ssim(amp_crop, amp_gt_crop, data_range=1.0)
-    psnr_amp = compute_psnr(amp_crop, amp_gt_crop, data_range=1.0)
-
-    print(f"[DIAG] Bypass DPM/Filter - SSIM amp: {ssim_amp.item():.6f}, PSNR amp: {psnr_amp.item():.2f}")
-    print(f"[DIAG] FS loss: {fs_loss.item():.6f}, FS TV: {fs_tv.item():.6f}")
-
-    # ---------- 6. 返回字典（保持接口兼容） ----------
-    return {
-        'loss': fs_loss,            # 临时只用 fs_loss
-        'fs_loss': fs_loss,
-        'fs_tv': fs_tv,
-        'ssim_amp': ssim_amp,
-        'psnr_amp': psnr_amp,
-        'ssim_img': ssim_img,
-        'psnr_img': psnr_img,
-        'mean_loss': torch.tensor(0.0),
-        'std_loss': torch.tensor(0.0)
-    }
 
 # ----------------------------------------------------------------------
 # 保存与加载 checkpoint
