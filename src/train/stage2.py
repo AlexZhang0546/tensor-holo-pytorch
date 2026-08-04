@@ -300,6 +300,15 @@ def train_stage2(
         print("Error during load_state_dict:", e)
         # 如果出错，可能是键名不匹配，尝试打印更多信息
         raise
+    # 加载前从 ckpt 中取参考值
+    ref_mean = state_dict['layers.0.0.conv_real.weight'].mean().item()
+    ref_std  = state_dict['layers.0.0.conv_real.weight'].std().item()
+    print(f"Checkpoint conv0 weight mean: {ref_mean:.6f}, std: {ref_std:.6f}")
+
+    # 加载后从模型中取实际值
+    model_mean = holonet.layers[0][0].conv_real.weight.data.mean().item()
+    model_std  = holonet.layers[0][0].conv_real.weight.data.std().item()
+    print(f"Model conv0 weight mean: {model_mean:.6f}, std: {model_std:.6f}")
 
     # ---------- 传播算子 ----------
     pad = training_params.get('padding', 0)
