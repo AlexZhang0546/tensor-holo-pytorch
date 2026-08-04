@@ -173,10 +173,10 @@ def _run_stage2_forward(
         res_w=holo_altered.shape[3],
         sigma=0.0,
         kernel_width=3,
-        phs_max=phs_max,
+        phs_max=None,#phs_max,
         amp_max=None,
         clamp=True,
-        normalize=True,
+        normalize=False,#True,
         wavelength=hologram_params['wavelengths']
     )
 
@@ -184,7 +184,7 @@ def _run_stage2_forward(
     amp_final, phs_final = filter_phs_only(
         phs_only,
         unnormalize_input=False,
-        normalize_output=True,     # 输出保持弧度，便于构造复数场
+        normalize_output=False,#True,
         propagator=propagator_pad,
         depth_shift=-depth_shift,
         batch=rgbd.size(0),
@@ -192,7 +192,7 @@ def _run_stage2_forward(
         res_h=holo_altered.shape[2],
         res_w=holo_altered.shape[3],
         radius=None,
-        phs_max=phs_max,
+        phs_max=None,#phs_max,
         amp_max=amp_max,
         wavelength=hologram_params['wavelengths']
     )
