@@ -316,8 +316,8 @@ def train_stage2(args, hologram_params, training_params, loss_params, device):
                 # 计算振幅图的 SSIM 和 PSNR
                 amp_pred = fwd_out['final_complex'].abs()
                 amp_gt   = fwd_out['target_padded'].abs()
-                ssim_val = compute_ssim(amp_pred, amp_gt, data_range=1.414)   # amp 范围 [0, √2]
-                psnr_val = compute_psnr(amp_pred, amp_gt, data_range=1.414)
+                ssim_val = compute_ssim(amp_pred, amp_gt)
+                psnr_val = compute_psnr(amp_pred, amp_gt)
             else:
                 # 焦栈损失（基于最终复数场）
                 fs_loss, fs_tv_loss, ssim_img, psnr_img = compute_focal_stack_loss(
