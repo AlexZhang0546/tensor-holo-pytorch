@@ -58,27 +58,18 @@ class ComplexHoloNet(nn.Module):
         self.layers = nn.ModuleList()
         for i in range(num_layers):
             is_last = (i == num_layers - 1)
-            if is_last:
-                # 最后一层输出 6 个实数通道（3 振幅 + 3 相位）
-                conv = nn.Conv2d(
-                    in_channels=in_dim_list[i],
-                    out_channels=num_complex_out * 2,  # 6
-                    kernel_size=filter_width,
-                    padding=filter_width // 2,
-                    bias=True
-                )
-                bn = nn.BatchNorm2d(num_complex_out * 2)
-            else:
-                conv = ComplexConv2d(
-                    in_channels=in_dim_list[i],
-                    out_channels=out_dim_list[i],
-                    kernel_size=filter_width,
-                    padding=filter_width // 2,
-                    bias=True
-                )
-                bn = ComplexBatchNorm2d(out_dim_list[i])
+
+            conv = ComplexConv2d(
+                in_channels=in_dim_list[i],
+                out_channels=out_dim_list[i],
+                kernel_size=filter_width,
+                padding=filter_width // 2,   # SAME padding
+                bias=True
+            )
+            bn = ComplexBatchNorm2d(out_dim_list[i])
 
             if is_last:
+                # 最后一层不做激活，保持线性
                 self.layers.append(nn.Sequential(conv, bn))
             else:
                 self.layers.append(nn.Sequential(conv, bn, ComplexReLU(out_dim_list[i])))
