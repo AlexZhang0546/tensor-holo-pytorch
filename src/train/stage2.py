@@ -570,8 +570,8 @@ def main():
     loss_params = {
         "loss_type": "l1",
         "weight_holo": 1.0,
-        "weight_fs": 0.0,#float(training_params["num_top_depth_for_img_loss"] + training_params["num_random_depth_for_img_loss"]),
-        "weight_fs_tv": 0.0,#float(training_params["num_top_depth_for_img_loss"] + training_params["num_random_depth_for_img_loss"]),
+        "weight_fs": 0.001,#float(training_params["num_top_depth_for_img_loss"] + training_params["num_random_depth_for_img_loss"]),
+        "weight_fs_tv": 0.001,#float(training_params["num_top_depth_for_img_loss"] + training_params["num_random_depth_for_img_loss"]),
         "weight_std": 0.02,
         "weight_mean": 0.03,
         "phs_max": [2 * np.pi, 2 * np.pi, 2 * np.pi]   # 关键：相位最大值
