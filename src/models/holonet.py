@@ -90,60 +90,14 @@ class ComplexHoloNet(nn.Module):
         imag = deinterleave_nonnative(r, x.imag)
         return torch.complex(real, imag)
 
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # 1. 输入重归一化（与原代码一致）
-        x = x - 0.5
-
-        # 2. 实数 → 复数（虚部置零）
-        x = torch.complex(x, torch.zeros_like(x))
-
-        # 3. 可选 interleave（空间→通道）
-        if self.interleave_rate > 1:
-            x = self._complex_interleave(self.interleave_rate, x)
-        x_in = x  # 保存用于跳跃连接
-
-        # 4. 逐层计算
-        prev_outputs = []
-        for i in range(self.num_layers):
-            # --- 构造输入 ---
-            if i == 0:
-               prev = x_in
-            elif i < 3 or (i % 2 == 0):
-                prev = prev_outputs[i-1]
-            else:
-                # 残差连接（复数加法直接支持）
-                prev = prev_outputs[i-1] + prev_outputs[i-2]
-
-            # 最后一层需拼接原始输入
-            if i == self.num_layers - 1:
-                prev = torch.cat([prev, x_in], dim=1)  # 复数拼接，通道维为 dim=1
-
-            out = self.layers[i](prev)
-            prev_outputs.append(out)
-
-    # 5. 最后一层输出（复数场）
-        field_complex = prev_outputs[-1]   # (B, out_dim, H, W)，复数
-
-    # 6. 可选 deinterleave
-        if self.interleave_rate > 1:
-            field_complex = self._complex_deinterleave(self.interleave_rate, field_complex)
-
-    # 7. 振幅约束到 [0, √2]，与原网络输出一致
-        amp = torch.abs(field_complex)
-        phs = torch.angle(field_complex)
-    # 使用 sigmoid 映射至 [0, √2]（平滑可微，最大范围接近 (0, √2)）
-        amp_constrained = torch.sigmoid(amp) * np.sqrt(2.0)
-        field_complex = torch.polar(amp_constrained, phs)
-
-        return field_complex
-"""
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-
+        """
         Args:
             x: 实数输入 (B, input_dim, H, W)，值任意。
         Returns:
             complex_field: 复数光场 (B, 3, H, W)，直接为复数张量。
-
+        """
         # 1. 输入重归一化（与原代码一致）
         x = x - 0.5
 
