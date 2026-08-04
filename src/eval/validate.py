@@ -103,7 +103,7 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
     depth_shift = training_params.get('depth_shift', 0.0)
     res_h, res_w = hologram_params['res_h'], hologram_params['res_w']
     wavelengths_np = hologram_params['wavelengths']
-    wavelengths = torch.tensor(wavelengths_np, device=device).view(1, -1, 1, 1)
+    wavelengths = torch.tensor(wavelengths_np, device=device, dtype=torch.float32).view(1, -1, 1, 1)
 
     propagator_pad = build_propagator_padded(res_h, res_w, hologram_params['pitch'],
                                              wavelengths_np, pad).to(device)
@@ -127,7 +127,7 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
 
             # 3. 深度偏移
             holo_shifted = propagator_pad(holo_mid, depth_shift) * compl_exp(
-                -2 * np.pi * depth_shift / wavelengths)
+                -2 * np.pi * depth_shift / wavelengths).to(torch.complex64)
 
             # 4. 复数 DDPM 校正（如果存在），直接输入复数场，输出复数场
             if ddpm_net is not None:
