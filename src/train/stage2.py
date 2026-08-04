@@ -95,7 +95,7 @@ def _run_stage2_forward(holonet, ddpm_net, rgbd, target_complex,
 
     # 3. 深度偏移（正向传播 + 相位补偿）
     holo_shifted = propagator_pad(holo_mid_pad, depth_shift) * compl_exp(
-        -2 * np.pi * depth_shift / wlen_tensor)
+        -2 * np.pi * depth_shift / wlen_tensor).to(torch.complex64)
 
     # 4. 复数 DDPM 校正
     bypass = training_params.get('bypass_ddpm_network', False)
