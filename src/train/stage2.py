@@ -269,46 +269,13 @@ def train_stage2(
     ddpm_net = ComplexDDPMNet(**ddpm_params).to(device) if not bypass_ddpm else None
 
     # ---------- 加载 stage1 权重 ----------
-    """
     if stage1_ckpt_path and os.path.exists(stage1_ckpt_path):
         print(f"Loading stage1 checkpoint from {stage1_ckpt_path}")
         ckpt = load_checkpoint(stage1_ckpt_path)
         holonet.load_state_dict(ckpt['model_state_dict'])
     else:
         print("WARNING: No stage1 checkpoint provided or file not found. Starting with random holonet weights.")
-    """
-    if stage1_ckpt_path and os.path.exists(stage1_ckpt_path):
-        print(f"Loading stage1 checkpoint from {stage1_ckpt_path}")
-        ckpt = load_checkpoint(stage1_ckpt_path)
-    
-    # 打印 checkpoint 中所有的键
-        print("Checkpoint keys:", list(ckpt.keys()))
-    
-    # 打印 network 部分的键名
-        state_dict = ckpt['model_state_dict']
-        print("State dict keys (first 5):", list(state_dict.keys())[:5])
-    
-    # 打印模型中对应层的参数名称
-        print("Model param names (first 5):", [name for name, _ in holonet.named_parameters()][:5])
-    
-    # 尝试加载并捕获错误
-    try:
-        missing, unexpected = holonet.load_state_dict(state_dict, strict=True)
-        print("Missing keys:", missing)
-        print("Unexpected keys:", unexpected)
-    except Exception as e:
-        print("Error during load_state_dict:", e)
-        # 如果出错，可能是键名不匹配，尝试打印更多信息
-        raise
-    # 加载前从 ckpt 中取参考值
-    ref_mean = state_dict['layers.0.0.conv_real.weight'].mean().item()
-    ref_std  = state_dict['layers.0.0.conv_real.weight'].std().item()
-    print(f"Checkpoint conv0 weight mean: {ref_mean:.6f}, std: {ref_std:.6f}")
 
-    # 加载后从模型中取实际值
-    model_mean = holonet.layers[0][0].conv_real.weight.data.mean().item()
-    model_std  = holonet.layers[0][0].conv_real.weight.data.std().item()
-    print(f"Model conv0 weight mean: {model_mean:.6f}, std: {model_std:.6f}")
 
     # ---------- 传播算子 ----------
     pad = training_params.get('padding', 0)
