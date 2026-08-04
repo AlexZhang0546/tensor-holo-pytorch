@@ -38,8 +38,9 @@ class ComplexConv2d(nn.Module):
     def reset_parameters(self):
         fan_in = self.conv_real.in_channels * self.conv_real.kernel_size[0] * self.conv_real.kernel_size[1]
         fan_out = self.conv_real.out_channels * self.conv_real.kernel_size[0] * self.conv_real.kernel_size[1]
-        # 使用原 TF 风格的均匀初始化
-        high = math.sqrt(2.0 / (fan_in + fan_out)) * 0.5  # r=0.5
+        # 使用原 TF 中的均匀分布初始化，方差缩放系数 r=0.25
+        r = 0.25
+        high = (r * 2.0 / (fan_in + fan_out)) ** 0.5
         with torch.no_grad():
             self.conv_real.weight.uniform_(-high, high)
             self.conv_imag.weight.uniform_(-high, high)
