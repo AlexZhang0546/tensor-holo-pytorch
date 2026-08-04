@@ -74,8 +74,8 @@ class Propagation(nn.Module):
         fy = fy.unsqueeze(0).unsqueeze(0)
 
         # 应用 ifftshift，将零频率从中心移到角落（与 torch.fft.fft2 无移位对应）
-        fx = ifftshift2d(fx, dim=(-2, -1))
-        fy = ifftshift2d(fy, dim=(-2, -1))
+        fx = ifftshift2d(fx)
+        fy = ifftshift2d(fy)
         return fx, fy
 
     def _compute_unit_phase_shift(self):
