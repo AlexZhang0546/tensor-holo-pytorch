@@ -162,7 +162,7 @@ def evaluate(args):
     propagator = build_propagator(res_h, res_w, hologram_params['pitch'],
                                   hologram_params['wavelengths'], pad, double_pad=True)
     propagator = propagator.to(device)
-        wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device, dtype=torch.float32).view(1, -1, 1, 1)
+    wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device, dtype=torch.float32).view(1, -1, 1, 1)
 
     with torch.no_grad():
         # 主网络直接输出复数光场
@@ -175,7 +175,7 @@ def evaluate(args):
     depth_shift = args.eval_depth_shift
     holo_out = complex_field
     holo_shifted = propagator(holo_out, depth_shift) * compl_exp(
-        -2 * np.pi * depth_shift / wavelengths_tensor)
+        -2 * np.pi * depth_shift / wavelengths_tensor).to(torch.complex64)
 
     # 复数 DDPM 校正：直接输入复数场，输出校正后的复数场
     if ddpm_net is not None:
