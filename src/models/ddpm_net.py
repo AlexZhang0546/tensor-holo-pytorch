@@ -88,29 +88,6 @@ class ComplexDDPMNet(nn.Module):
             else:
                 self.layers.append(nn.Sequential(conv, bn, ComplexReLU(out_dim_list[i])))
 
-        # 自定义权重/偏置初始化
-        self._init_weights()
-
-    def _init_weights(self):
-        """使用与原项目一致的 Xavier 初始化和截断正态偏置。"""
-        for i, layer_block in enumerate(self.layers):
-            conv = layer_block[0]  # ComplexConv2d 是第一个模块
-            fan_in = conv.conv_real.in_channels * self.filter_width * self.filter_width
-            fan_out = conv.conv_real.out_channels * self.filter_width * self.filter_width
-
-            # Xavier 幅度调整（与 util.py 中 tf_init_weights 一致）
-            high = np.sqrt(self.weight_var_scale * 2.0 / (fan_in + fan_out))
-            low = -high
-
-            # 实部卷积权重与偏置
-            with torch.no_grad():
-                conv.conv_real.weight.uniform_(low, high)
-                conv.conv_imag.weight.uniform_(low, high)
-                if conv.conv_real.bias is not None:
-                    conv.conv_real.bias.normal_(std=self.bias_stddev)
-                if conv.conv_imag.bias is not None:
-                    conv.conv_imag.bias.normal_(std=self.bias_stddev)
-
     def _complex_interleave(self, r: int, x: torch.Tensor) -> torch.Tensor:
         """对复数张量进行空间→通道重排（interleave）。"""
         if r == 1:
