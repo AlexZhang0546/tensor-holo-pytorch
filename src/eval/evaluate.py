@@ -162,7 +162,7 @@ def evaluate(args):
     propagator = build_propagator(res_h, res_w, hologram_params['pitch'],
                                   hologram_params['wavelengths'], pad, double_pad=True)
     propagator = propagator.to(device)
-    wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
+        wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device, dtype=torch.float32).view(1, -1, 1, 1)
 
     with torch.no_grad():
         # 主网络直接输出复数光场
