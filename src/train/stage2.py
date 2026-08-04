@@ -146,7 +146,11 @@ def _run_stage2_forward(
     holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
                    compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
 
-
+    holo_mid = holonet(rgbd)
+    amp_mid = holo_mid.abs()
+    ssim_mid = compute_ssim(amp_mid, amp_gt, data_range=1.0)
+    print(f"Mid-plane SSIM (before shift): {ssim_mid:.4f}")
+    
     # 4. DDPM 校正或 bypass
     if ddpm_net is not None and not bypass_ddpm:
         # 复数 DDPM 网络直接接收复数场
