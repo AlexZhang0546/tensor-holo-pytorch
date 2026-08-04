@@ -80,7 +80,7 @@ def _run_stage2_forward(holonet, ddpm_net, rgbd, target_complex,
     depth_shift = training_params.get('depth_shift', 0.0)
     wavelengths = hologram_params['wavelengths']
     device = rgbd.device
-    wlen_tensor = torch.tensor(wavelengths, device=device).view(1, -1, 1, 1)
+    wlen_tensor = torch.tensor(wavelengths, device=device, dtype=torch.float32).view(1, -1, 1, 1)
 
     # 1. 主网络预测（复数，无归一化）
     holo_mid = holonet(rgbd)
