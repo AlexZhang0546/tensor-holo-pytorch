@@ -107,7 +107,7 @@ def filter_phs_only(
 
     # ---------- 2. 构造纯相位复数场 ----------
     # 振幅均匀为 amp_max
-    amplitude = torch.full_like(phs, amp_max)
+    amplitude = torch.full_like(phs, amp_max.item() if isinstance(amp_max, torch.Tensor) else amp_max)
     field = compl_val(amplitude, phs)
 
     # ---------- 3. 频域低通滤波 ----------
