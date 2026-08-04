@@ -118,8 +118,8 @@ def combine_loss(
     # 4. 振幅图 SSIM / PSNR（在裁剪后的振幅上计算）
     amp_pred = holo_out_crop.abs()
     amp_gt   = target_crop.abs()
-    ssim_amp = compute_ssim(amp_pred, amp_gt, data_range=1.0)
-    psnr_amp = compute_psnr(amp_pred, amp_gt, data_range=1.0)
+    ssim_amp = compute_ssim(amp_pred, amp_gt)
+    psnr_amp = compute_psnr(amp_pred, amp_gt)
 
     # 5. 总损失组合
     weight_holo = loss_params.get('weight_holo', 1.0)
