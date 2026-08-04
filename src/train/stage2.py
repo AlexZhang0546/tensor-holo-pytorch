@@ -199,20 +199,6 @@ def _run_stage2_forward(
     # 2. 直接用 holo_shifted 作为最终输出（跳过 DDPM、DPM、滤波）
     holo_out = holo_shifted
 
-    # 3. 目标构造（与原代码一致）
-    holo_gt = compl_val(amp_gt, (phs_gt - 0.5) * 2.0 * np.pi)
-    holo_gt_padded = complex_pad(holo_gt, pad)
-
-    # 4. 计算焦栈损失和 SSIM（不包含 std/mean loss）
-    fs_loss, fs_tv, ssim_img, psnr_img = compute_focal_stack_loss(
-        holo_out, holo_gt_padded, rgbd, propagator_pad,
-        hologram_params, training_params, F.l1_loss, pad=pad
-    )
-    amp_crop = holo_out.abs()[:, :, pad:pad+H, pad:pad+W]
-    amp_gt_crop = amp_gt
-    ssim_amp = compute_ssim(amp_crop, amp_gt_crop, data_range=1.0)
-    print(f"Bypass DPM/Filter - SSIM amp: {ssim_amp:.4f}, FS loss: {fs_loss:.6f}")
-
     # 7. 目标全息图构造并 padding
     holo_gt = compl_val(amp_gt, (phs_gt - 0.5) * 2.0 * np.pi)
     holo_gt_padded = complex_pad(holo_gt, pad)
@@ -229,6 +215,7 @@ def _run_stage2_forward(
     amp_gt_crop = amp_gt[:, :, pad:pad + hologram_params['res_h'], pad:pad + hologram_params['res_w']]
     ssim_amp = compute_ssim(amp_crop, amp_gt_crop, data_range=1.0)
     psnr_amp = compute_psnr(amp_crop, amp_gt_crop, data_range=1.0)
+    print(f"Bypass DPM/Filter - SSIM amp: {ssim_amp:.4f}, FS loss: {fs_loss:.6f}")
 
     # 10. 组合总损失
     w_fs = loss_params.get('weight_fs', 1.0)
