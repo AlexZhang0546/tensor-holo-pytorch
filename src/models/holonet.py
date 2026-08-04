@@ -138,5 +138,5 @@ class ComplexHoloNet(nn.Module):
 
         # 7. 直接返回复数光场，不再拆分振幅/相位
         return field_complex
-"""
+
     
