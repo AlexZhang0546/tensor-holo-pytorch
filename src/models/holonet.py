@@ -128,21 +128,15 @@ class ComplexHoloNet(nn.Module):
             out = self.layers[i](prev)
             prev_outputs.append(out)
 
-        # 5. 最后一层输出（实数卷积，输出 6 通道）
-        real_out = prev_outputs[-1]        # (B, 6, H, W)  注意：此时最后一层是普通 Conv2d
-        # 6. tanh 激活
-        real_out = torch.tanh(real_out)
-        # 7. 拆分振幅与相位
-        amp = real_out[:, :3, :, :] * np.sqrt(0.5) + np.sqrt(0.5)  # 范围 [0, √2]
-        phs = real_out[:, 3:, :, :] * 0.5 + 0.5                      # 范围 [0, 1]
-        # 8. 转换为复数
-        phs_rad = (phs - 0.5) * 2 * np.pi
-        complex_field = torch.polar(amp, phs_rad)    # (B, 3, H, W)
+        # 5. 最后一层输出（复数场）
+        field_complex = prev_outputs[-1]   # (B, out_dim, H, W)，复数
 
-        # 9. 可选 deinterleave（在转复数前做，因为是实数域）
+        # 6. 可选 deinterleave
         if self.interleave_rate > 1:
-            raise NotImplementedError("Interleave with real output not supported yet; "
-                                      "please set interleave_rate=1 for now.")
-        return complex_field
+            field_complex = self._complex_deinterleave(self.interleave_rate, field_complex)
+        # 现在 field_complex 形状: (B, 3, H, W)
+
+        # 7. 直接返回复数光场，不再拆分振幅/相位
+        return field_complex
 
     
