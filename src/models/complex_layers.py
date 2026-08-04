@@ -38,10 +38,15 @@ class ComplexConv2d(nn.Module):
     def reset_parameters(self):
         fan_in = self.conv_real.in_channels * self.conv_real.kernel_size[0] * self.conv_real.kernel_size[1]
         fan_out = self.conv_real.out_channels * self.conv_real.kernel_size[0] * self.conv_real.kernel_size[1]
-        complex_xavier_uniform_(self.conv_real.weight, self.conv_imag.weight, fan_in, fan_out)
-        if self.conv_real.bias is not None and self.conv_imag.bias is not None:
-            nn.init.zeros_(self.conv_real.bias)
-            nn.init.zeros_(self.conv_imag.bias)
+        # 使用原 TF 风格的均匀初始化
+        high = math.sqrt(2.0 / (fan_in + fan_out)) * 0.5  # r=0.5
+        with torch.no_grad():
+            self.conv_real.weight.uniform_(-high, high)
+            self.conv_imag.weight.uniform_(-high, high)
+            if self.conv_real.bias is not None:
+                self.conv_real.bias.normal_(std=0.01)
+            if self.conv_imag.bias is not None:
+                self.conv_imag.bias.normal_(std=0.01)
 
     def forward(self, x):
         if torch.is_complex(x):
