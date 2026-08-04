@@ -360,11 +360,10 @@ def train_stage2(args, hologram_params, training_params, loss_params, device):
             # 控制台输出
             if (batch_idx + 1) % 50 == 0 or batch_idx == 0:
                 log_str = (f"Epoch {epoch:3d} [{phase:>8s}] Batch {batch_idx:4d}/{len(train_loader)} "
-                           f"| Loss {loss.item():.6f}")
+                           f"| Loss {loss.item():.6f} | SSIM {ssim_val:.4f} | PSNR {psnr_val:.2f}")
                 if phase == 'joint':
                     log_str += (f" | FS {fs_loss.item():.6f} | FS_TV {fs_tv_loss.item():.6f} "
-                                f"| Std {std_loss.item():.4f} | Mean {mean_loss.item():.4f} "
-                                f"| SSIM_img {ssim_img.item():.4f} | PSNR_img {psnr_img.item():.2f}")
+                                f"| Std {std_loss.item():.4f} | Mean {mean_loss.item():.4f}")
                 print(log_str)
 
             # 定期验证
