@@ -197,7 +197,7 @@ def build_original_parser():
 
     # ---- 调试 ----
     parser.add_argument("--dry-run", action="store_true",
-                        help="Print the translated sub-command and exit "
+                        help="Print the translated command and exit "
                              "without running")
     return parser
 
