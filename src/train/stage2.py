@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.models.holonet import ComplexHoloNet
+from src.models.factory import build_main_net
 from src.models.ddpm_net import ComplexDDPMNet
 from src.data.dataset import THDataset, create_dataloader
 from src.optics.propagation import propagator_factory
@@ -70,6 +70,15 @@ def parse_args():
     parser.add_argument('--depth-shift', dest='depth_shift', default=12.0,
                         type=float,
                         help='Depth shift from midpoint hologram (mm)')
+    parser.add_argument('--model-arch', default='holonet',
+                        choices=['holonet', 'unet'],
+                        help='Main network architecture')
+    parser.add_argument('--unet-depth', type=int, default=3,
+                        help='ComplexUNet downsample levels')
+    parser.add_argument('--unet-base-filters', type=int, default=24,
+                        help='ComplexUNet base filters (shallowest level)')
+    parser.add_argument('--unet-attention', action='store_true',
+                        help='Enable bottleneck self-attention in ComplexUNet')
     # 别名：与原始 main_v2.py 的参数名保持一致
     parser.add_argument('--train-depth-shift', dest='depth_shift',
                         default=12.0, type=float, help=argparse.SUPPRESS)
@@ -555,6 +564,10 @@ def main():
         "input_dim": 4,
         "num_layers": args.num_layers,
         "num_filters_per_layer": args.num_filters_per_layer,
+        "arch": args.model_arch,
+        "unet_depth": args.unet_depth,
+        "unet_base_filters": args.unet_base_filters,
+        "unet_attention": args.unet_attention,
         "interleave_rate": 1,
         "filter_width": 3,
         "bias_stddev": 0.01,
