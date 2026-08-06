@@ -210,8 +210,22 @@ python main.py --export-mode --activate-ddpm \
 ```
 
 ONNX 不支持复数张量与 FFT/IFFT，因此导出时把网络输出拆为 `real_out` / `imag_out`
-两个实数张量（opset 14，batch 维度动态）。深度偏移、双相位编码等光学后处理需在
+两个实数张量（opset 18，batch 维度动态）。深度偏移、双相位编码等光学后处理需在
 推理管线中自行实现。
+
+### ONNX 正确性测试
+
+```bash
+# stage1（无 DDPM）
+python test_onnx.py --ckpt model/.../stage1_latest.pth --res 384
+
+# stage2（holonet + DDPM）
+python test_onnx.py --ckpt model/.../stage2_joint_latest.pth --activate-ddpm --res 384
+```
+
+脚本会导出 ONNX，并在相同输入上对比 PyTorch 与 ONNX Runtime 的 `real_out` / `imag_out`
+（最大/平均绝对误差、相对误差、振幅 SSIM），batch 1/2 均通过且误差在 1e-5 量级即视为 PASS。
+数值对比测试通过后，导出时的分辨率（`--trt-res-h/w`）决定部署分辨率，两者相互独立。
 
 ## 主要参数速查表
 
