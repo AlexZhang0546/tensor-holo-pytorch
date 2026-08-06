@@ -60,8 +60,13 @@ def compare(tag, torch_model, onnx_path, x, tol=2e-4):
     import onnxruntime as ort
 
     with torch.no_grad():
-        tr, ti = torch_model(x)
-        tr, ti = tr.numpy(), ti.numpy()
+        out = torch_model(x)
+        if isinstance(out, (tuple, list)):
+            tr, ti = out[0].numpy(), out[1].numpy()
+        elif torch.is_complex(out):
+            tr, ti = out.real.numpy(), out.imag.numpy()
+        else:
+            raise TypeError("unexpected torch model output type")
 
     sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
     in_name = sess.get_inputs()[0].name
@@ -113,6 +118,12 @@ def main():
         res_h=args.res, res_w=args.res, pad=0, input_dim=4, device="cpu",
     )
     print("export ok")
+    try:
+        import onnx
+        m = onnx.load(onnx_path)
+        print("onnx opset:", [(x.domain, x.version) for x in m.opset_import])
+    except Exception as e:
+        print("opset query failed:", e)
 
     results = []
     for batch in (1, 2):
