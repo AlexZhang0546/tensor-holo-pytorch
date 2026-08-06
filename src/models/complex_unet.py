@@ -66,7 +66,7 @@ class ComplexSelfAttention(nn.Module):
         k = self.k(x).flatten(2)                      # (B, C, HW)
         v = self.v(x).flatten(2).transpose(1, 2)      # (B, HW, C)
         scores = torch.real(q @ k) * self.scale       # (B, HW, HW)
-        attn = torch.softmax(scores, dim=-1)
+        attn = torch.softmax(scores, dim=-1).to(v.dtype)
         out = attn @ v                                # (B, HW, C)
         out = out.transpose(1, 2).view(B, C, H, W)
         return self.out(out) + x
