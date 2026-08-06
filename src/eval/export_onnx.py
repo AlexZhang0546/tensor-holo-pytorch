@@ -67,7 +67,7 @@ def export_onnx(
             # 拆分为实部和虚部实数张量，便于 ONNX 导出
             return complex_field.real, complex_field.imag
 
-    export_model = ExportModel(holonet, ddpm_net, pad).to(device)
+    export_model = ExportModel(holonet, ddpm_net, pad).to(device).eval()
 
     # 定义动态轴
     dynamic_axes = {
@@ -76,7 +76,9 @@ def export_onnx(
         "imag_out": {0: "batch_size"}
     }
 
-    # 导出
+    # 导出。
+    # 注意：torch >= 2.12 的 dynamo ONNX 导出器最低支持 opset 18（请求更低的
+    # opset_version 会被忽略并尝试自动降级，且降级转换会失败），因此这里固定 18。
     torch.onnx.export(
         export_model,
         dummy_rgbd,
@@ -84,7 +86,7 @@ def export_onnx(
         input_names=["input"],
         output_names=["real_out", "imag_out"],
         dynamic_axes=dynamic_axes,
-        opset_version=14,
+        opset_version=18,
         do_constant_folding=True,
         verbose=False
     )
