@@ -9,8 +9,7 @@ Holographic Display*，Shi et al., Light: Science and Applications, 2022）的 P
 - 网络直接输出**复数光场** `(B, 3, H, W)`（complex64），替代原版的幅值/相位两路输出；
 - 全链路（网络、光学传播、双相位编码、孔径滤波、损失）均为纯 PyTorch 可微实现，无 TensorFlow 依赖，
   仅使用 `tfrecord` 包直接读取原始 TFRecord 数据；
-- CLI 参数名与默认值尽量与 `main_v2.py` 保持一致（单 argparse + 模式开关），同时保留旧 subcommand 接口，
-  两种调用方式等价。
+- CLI 参数名与默认值尽量与 `main_v2.py` 保持一致（单 argparse + 模式开关）。
 
 主要功能：
 
@@ -25,7 +24,7 @@ Holographic Display*，Shi et al., Light: Science and Applications, 2022）的 P
 
 ```text
 .
-├── main.py                  # 总入口：原始风格参数 + 旧 subcommand 分发
+├── main.py                  # 总入口：原始风格参数分发
 ├── src/
 │   ├── data/
 │   │   ├── dataset.py       # TFRecord 数据集读取（与原 _extract_fn 解析一致）
@@ -106,23 +105,18 @@ tensorboard>=2.9.0   # 可选，用于训练日志记录
 
 ## 使用方法
 
-所有功能通过 `main.py` 提供统一入口，两种接口等价：
+所有功能通过 `main.py` 提供统一入口（参照 `main_v2.py` 的单 argparse 风格）：
 
-1. **原始风格**（参照 `main_v2.py` 的单 argparse）：`--train-mode` / `--validate-mode-s1` /
-   `--validate-mode-s2` / `--eval-mode` / `--export-mode`，训练阶段用 `--train-stage stage1|stage2`
-   选择；`--dry-run` 只打印翻译后的命令不执行。
-2. **旧 subcommand**：`train_stage1` / `train_stage2` / `validate` / `evaluate` / `export`。
+- `--train-mode --train-stage stage1|stage2`：训练 Stage 1 / Stage 2。
+- `--validate-mode-s1` / `--validate-mode-s2`：验证。
+- `--eval-mode`：单张 RGB-D 推理。
+- `--export-mode`：导出 ONNX。
+- `--dry-run`：只打印翻译后的命令，不执行。
 
 ### 训练 Stage 1（主网络）
 
 ```bash
-# 原始风格
 python main.py --train-mode --train-stage stage1 \
-  --dataset-res 384 --num-epochs 200 --batch 2 --learning-rate 1e-4 \
-  --num-iter-per-test 200
-
-# 等价 subcommand
-python main.py train_stage1 \
   --dataset-res 384 --num-epochs 200 --batch 2 --learning-rate 1e-4 \
   --num-iter-per-test 200
 ```
@@ -169,14 +163,8 @@ python main.py --train-mode --train-stage stage2 \
 ### 验证
 
 ```bash
-# 原始风格
 python main.py --validate-mode-s1 --ckpt-path model/.../stage1_latest.pth
 python main.py --validate-mode-s2 --activate-ddpm \
-  --ckpt-path model/.../stage2_joint_latest.pth --depth-shift 12.0
-
-# 等价 subcommand（注意参数名是 --val-mode）
-python main.py validate --val-mode stage1 --ckpt-path model/.../stage1_latest.pth
-python main.py validate --val-mode stage2 --activate-ddpm \
   --ckpt-path model/.../stage2_joint_latest.pth --depth-shift 12.0
 ```
 
@@ -242,7 +230,7 @@ python test_onnx.py --ckpt model/.../stage2_joint_latest.pth --activate-ddpm --r
 | `--joint-epochs` | 200 | Stage 2 联合训练 epoch 数 |
 | `--batch` | 2 | 批大小 |
 | `--learning-rate` | 1e-4 | 学习率 |
-| `--num-iter-per-test` | 1000（subcommand stage2 为 500） | 训练中验证间隔（step） |
+| `--num-iter-per-test` | 1000 | 训练中验证间隔（step） |
 | `--active-max-ldi-layer` | 0 | 最大 LDI 层索引（0 = 单层 RGBD） |
 | `--depth-shift` / `--train-depth-shift` | 12.0 | Stage 2 深度偏移（mm） |
 | `--padding` | 0 | 全息图边缘填充（容纳出画幅衍射） |
