@@ -13,8 +13,10 @@ Holographic Display*，Shi et al., Light: Science and Applications, 2022）的 P
 
 主要功能：
 
-- **两阶段训练**：Stage 1 训练主网络 `ComplexHoloNet`（复数全息损失 + 焦栈损失 + TV 损失）；
+- **两阶段训练**：Stage 1 训练主网络（复数全息损失 + 焦栈损失 + TV 损失）；
   Stage 2 先做 DDPM 恒等预训练，再做主网络 + DDPM 联合微调（焦栈 + TV + 相位统计正则）。
+- **两种主网络架构**：默认 `ComplexHoloNet`（深残差序列），或 `--model-arch unet`
+  切换为多尺度 `ComplexUNet`（编码器-解码器 + 跳跃连接，可选用自注意力）。
 - **光学仿真**：角谱传播（支持 `double_pad`）、深度偏移、AA-DPM / BL-DPM / Maimone DPM
   三种双相位编码、物理孔径滤波。
 - **评估与部署**：验证集批量 SSIM/PSNR；单张 RGB-D 推理输出相位图/振幅图；导出 ONNX
@@ -31,8 +33,10 @@ Holographic Display*，Shi et al., Light: Science and Applications, 2022）的 P
 │   │   └── transforms.py    # interleave / deinterleave
 │   ├── models/
 │   │   ├── holonet.py       # ComplexHoloNet 主全息预测网络（复数）
+│   │   ├── complex_unet.py  # ComplexUNet 多尺度编码器-解码器网络（复数）
+│   │   ├── factory.py       # 主网络工厂（按 --model-arch 构建）
 │   │   ├── ddpm_net.py      # ComplexDDPMNet 校正网络（复数）
-│   │   └── complex_layers.py# 复数卷积 / BN / ReLU 等基础模块
+│   │   └── complex_layers.py# 复数卷积/转置卷积 / BN / ReLU 等基础模块
 │   ├── optics/
 │   │   ├── propagation.py   # 角谱（AS）/ 菲涅尔传播
 │   │   ├── complex_utils.py # 复数构造、FFT 工具
