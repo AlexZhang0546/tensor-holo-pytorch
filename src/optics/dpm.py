@@ -20,6 +20,26 @@ from .complex_utils import compl_val, compl_exp, fft2d, ifft2d, fftshift2d, ifft
 
 
 # ----------------------------------------------------------------------
+# TF NCHW depth_to_space 的 PyTorch 等价实现
+# ----------------------------------------------------------------------
+def _depth_to_space_nchw(x: torch.Tensor, block_size: int) -> torch.Tensor:
+    """
+    与 tf.compat.v1.depth_to_space(x, block_size, data_format='NCHW') 完全一致的
+    通道->空间重排。注意：PyTorch 的 F.pixel_shuffle 映射与之不同！
+
+    TF NCHW 映射：
+        out[b, c, h*block_size + t, w*block_size + s] =
+            in[b, c + C*s + C*block_size*t, h, w]
+    其中 C = 输出通道数，t/s 为块内行/列偏移。
+    """
+    B, Ck, H, W = x.shape
+    C = Ck // (block_size * block_size)
+    y = x.view(B, block_size, block_size, C, H, W)   # (t, s, c)
+    y = y.permute(0, 3, 4, 1, 5, 2).contiguous()     # (B, C, H, t, W, s)
+    return y.reshape(B, C, H * block_size, W * block_size)
+
+
+# ----------------------------------------------------------------------
 # 相位包裹（替代 tf_wrap_phs）
 # ----------------------------------------------------------------------
 def _wrap_phase(phs_only: torch.Tensor,
@@ -188,7 +208,7 @@ def dpm_maimone(cpx: torch.Tensor,
     # 在通道维拼接：每个原始通道变为 4 个通道
     phs_stacked = torch.cat([phs_1_1, phs_1_2, phs_2_1, phs_2_2], dim=1)
     # 使用 pixel_shuffle 上采样 2 倍，输出形状 (B, C, H, W)
-    phs_only = F.pixel_shuffle(phs_stacked, upscale_factor=2)
+    phs_only = _depth_to_space_nchw(phs_stacked, 2)
 
     # ---- 相位包裹 ----
     if phs_max is not None:
@@ -278,7 +298,7 @@ def bldpm(cpx: torch.Tensor,
     phs_2_2 = phs_low[:, :, 1::2, 1::2]
 
     phs_stacked = torch.cat([phs_1_1, phs_1_2, phs_2_1, phs_2_2], dim=1)
-    phs_only = F.pixel_shuffle(phs_stacked, upscale_factor=2)
+    phs_only = _depth_to_space_nchw(phs_stacked, 2)
 
     # ---- 相位包裹 ----
     if phs_max is not None:
@@ -351,7 +371,7 @@ def aadpm(cpx: torch.Tensor,
     phs_2_2 = phs_low[:, :, 1::2, 1::2]
 
     phs_stacked = torch.cat([phs_1_1, phs_1_2, phs_2_1, phs_2_2], dim=1)
-    phs_only = F.pixel_shuffle(phs_stacked, upscale_factor=2)
+    phs_only = _depth_to_space_nchw(phs_stacked, 2)
 
     # ---- 相位包裹 ----
     if phs_max is not None:
