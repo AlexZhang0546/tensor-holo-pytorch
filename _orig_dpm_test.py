@@ -49,6 +49,14 @@ ssim_amp = tf.reduce_mean(tf.image.ssim(
     tf.transpose(amp_out, [0, 2, 3, 1]),
     tf.transpose(amp_gt_t, [0, 2, 3, 1]), 1.0))
 
+# 导出中间量用于与端口逐元素对照
+save_ops = {
+    "orig_holo_shift": holo_shift,
+    "orig_phs_only": phs_only,
+    "orig_amp_out": amp_out,
+    "orig_phs_out": phs_out,
+}
+
 # focal-plane image comparison
 ssim_focal = {}
 for focus in [-3.0, 0.0, 3.0]:
@@ -69,3 +77,7 @@ with tf.Session() as sess:
     # 输出 phs_only 范围
     po = sess.run(phs_only)
     print("orig phs_only range: %.3f .. %.3f" % (po.min(), po.max()))
+    for name, op in save_ops.items():
+        val = sess.run(op)
+        np.save(os.path.join(DUMP, name + ".npy"), val[0])
+        print("saved", name, val.shape, val.dtype)
