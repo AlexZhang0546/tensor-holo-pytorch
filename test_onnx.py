@@ -27,6 +27,27 @@ from src.eval.export_onnx import export_onnx
 from src.utils.metrics import compute_ssim
 
 
+class TorchPipeline(torch.nn.Module):
+    """与 export_onnx 中 ExportModel 等价的 PyTorch 链路：holonet -> (ddpm)。"""
+
+    def __init__(self, holonet, ddpm_net=None, pad=0):
+        super().__init__()
+        self.holonet = holonet
+        self.ddpm_net = ddpm_net
+        self.pad = pad
+
+    def forward(self, x):
+        field = self.holonet(x)
+        if self.pad > 0:
+            field = torch.complex(
+                torch.nn.functional.pad(field.real, (self.pad,) * 4, value=0.0),
+                torch.nn.functional.pad(field.imag, (self.pad,) * 4, value=0.0),
+            )
+        if self.ddpm_net is not None:
+            field = self.ddpm_net(field)
+        return field
+
+
 def build_models(ckpt_path, activate_ddpm, input_dim=4):
     ckpt = torch.load(ckpt_path, map_location="cpu")
     holonet = ComplexHoloNet(
@@ -107,6 +128,7 @@ def main():
     args = ap.parse_args()
 
     holonet, ddpm_net = build_models(args.ckpt, args.activate_ddpm)
+    torch_model = TorchPipeline(holonet, ddpm_net)
     tag = "stage1" if not args.activate_ddpm else "stage2+ddpm"
     onnx_path = args.output or f"/tmp/{tag}_test.onnx"
     if os.path.exists(onnx_path):
@@ -129,7 +151,7 @@ def main():
     for batch in (1, 2):
         x = make_inputs(args.res, batch)
         results.append(compare(
-            f"{tag} batch={batch}", holonet, onnx_path, x, tol=args.tol))
+            f"{tag} batch={batch}", torch_model, onnx_path, x, tol=args.tol))
     if not all(results):
         print("RESULT: FAIL")
         sys.exit(1)
