@@ -21,7 +21,7 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.models.holonet import ComplexHoloNet
+from src.models.factory import build_main_net
 from src.models.ddpm_net import ComplexDDPMNet
 from src.eval.export_onnx import export_onnx
 from src.utils.metrics import compute_ssim
@@ -48,10 +48,14 @@ class TorchPipeline(torch.nn.Module):
         return field
 
 
-def build_models(ckpt_path, activate_ddpm, input_dim=4):
+def build_models(ckpt_path, activate_ddpm, input_dim=4, arch="holonet",
+                 unet_depth=3, unet_base_filters=24, unet_attention=False):
     ckpt = torch.load(ckpt_path, map_location="cpu")
-    holonet = ComplexHoloNet(
+    holonet = build_main_net(
+        arch=arch,
         input_dim=input_dim, num_layers=30, num_filters_per_layer=24
+        , unet_depth=unet_depth, unet_base_filters=unet_base_filters,
+        unet_attention=unet_attention,
     ).eval()
     if "model_state_dict" in ckpt:
         holonet.load_state_dict(ckpt["model_state_dict"])
@@ -125,9 +129,17 @@ def main():
     ap.add_argument("--res", type=int, default=384)
     ap.add_argument("--output", default=None, help="onnx output path")
     ap.add_argument("--tol", type=float, default=2e-4)
+    ap.add_argument("--arch", default="holonet",
+                    choices=["holonet", "unet"], help="main network architecture")
+    ap.add_argument("--unet-depth", type=int, default=3)
+    ap.add_argument("--unet-base-filters", type=int, default=24)
+    ap.add_argument("--unet-attention", action="store_true")
     args = ap.parse_args()
 
-    holonet, ddpm_net = build_models(args.ckpt, args.activate_ddpm)
+    holonet, ddpm_net = build_models(
+        args.ckpt, args.activate_ddpm, arch=args.arch,
+        unet_depth=args.unet_depth, unet_base_filters=args.unet_base_filters,
+        unet_attention=args.unet_attention)
     torch_model = TorchPipeline(holonet, ddpm_net)
     tag = "stage1" if not args.activate_ddpm else "stage2+ddpm"
     onnx_path = args.output or f"/tmp/{tag}_test.onnx"
