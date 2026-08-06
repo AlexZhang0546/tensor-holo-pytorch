@@ -27,7 +27,7 @@ def _gaussian_kernel(kernel_size: int, sigma: float, channels: int) -> torch.Ten
 def compute_ssim(
     img1: torch.Tensor,
     img2: torch.Tensor,
-    data_range: float = 1.0,
+    data_range: float = math.sqrt(2),
     kernel_size: int = 11,
     sigma: float = 1.5,
     C1: Optional[float] = None,
@@ -76,7 +76,7 @@ def compute_ssim(
 def compute_psnr(
     img1: torch.Tensor,
     img2: torch.Tensor,
-    data_range: float = 1.0,
+    data_range: float = math.sqrt(2),
 ) -> torch.Tensor:
     if img1.dim() == 3:
         img1 = img1.unsqueeze(0)
