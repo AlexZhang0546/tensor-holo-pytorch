@@ -57,7 +57,19 @@ def parse_args():
 
 def build_model(model_params):
     """根据参数字典构建复数主网络"""
-    return build_main_net(**model_params)
+    return build_main_net(
+        arch=model_params.get("arch", "holonet"),
+        input_dim=model_params["input_dim"],
+        num_layers=model_params["num_layers"],
+        num_filters_per_layer=model_params["num_filters_per_layer"],
+        interleave_rate=model_params.get("interleave_rate", 1),
+        filter_width=model_params.get("filter_width", 3),
+        bias_stddev=model_params.get("bias_stddev", 0.01),
+        weight_var_scale=model_params.get("weight_var_scale", 0.25),
+        unet_depth=model_params.get("unet_depth", 3),
+        unet_base_filters=model_params.get("unet_base_filters", 24),
+        unet_attention=model_params.get("unet_attention", False),
+    )
 
 
 def build_propagator(hologram_params):
