@@ -80,7 +80,7 @@ tensorboard>=2.9.0   # 可选，用于训练日志记录
 - 项目路径：`/root/autodl-tmp/ZhangRuixuan/tensor-holo-pytorch`
 - 虚拟环境：`conda activate holography`
 - 长时训练建议在 `screen` 会话中运行（例如 `screen -S zrx-tensor-holo` 新建、
-  `screen -r zrx-tensor-holo` 恢复）。
+  `screen` 恢复）。
 
 ## 数据准备
 
