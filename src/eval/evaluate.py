@@ -18,7 +18,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.models.holonet import ComplexHoloNet
+from src.models.factory import build_main_net
 from src.models.ddpm_net import ComplexDDPMNet          # 复数 DDPM 网络
 from src.optics.propagation import propagator_factory
 from src.optics.complex_utils import compl_val, compl_exp
@@ -106,15 +106,15 @@ def evaluate(args):
     }
 
     input_dim = 4 * (args.active_max_ldi_layer + 1)
-    # 复数主网络
-    holonet = ComplexHoloNet(
+    # 复数主网络（按 arch 构建）
+    holonet = build_main_net(
+        arch=getattr(args, 'model_arch', 'holonet'),
         input_dim=input_dim,
         num_layers=args.num_layers,
         num_filters_per_layer=args.num_filters_per_layer,
-        interleave_rate=1,
-        filter_width=3,
-        bias_stddev=0.01,
-        weight_var_scale=0.25
+        unet_depth=getattr(args, 'unet_depth', 3),
+        unet_base_filters=getattr(args, 'unet_base_filters', 24),
+        unet_attention=getattr(args, 'unet_attention', False),
     ).to(device)
 
     load_model(holonet, args.ckpt_path, device)
@@ -283,6 +283,15 @@ if __name__ == '__main__':
     parser.add_argument('--num-layers', type=int, default=30)
     parser.add_argument('--num-filters-per-layer', type=int, default=24)
     parser.add_argument('--active-max-ldi-layer', type=int, default=0)
+    parser.add_argument('--model-arch', default='holonet',
+                        choices=['holonet', 'unet'],
+                        help='Main network architecture')
+    parser.add_argument('--unet-depth', type=int, default=3,
+                        help='ComplexUNet downsample levels')
+    parser.add_argument('--unet-base-filters', type=int, default=24,
+                        help='ComplexUNet base filters (shallowest level)')
+    parser.add_argument('--unet-attention', action='store_true',
+                        help='Enable bottleneck self-attention in ComplexUNet')
     parser.add_argument('--eval-res-h', type=int, default=1080)
     parser.add_argument('--eval-res-w', type=int, default=1920)
     parser.add_argument('--eval-rgb-path', type=str, required=True)
