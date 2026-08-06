@@ -13,7 +13,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.models.holonet import ComplexHoloNet
+from src.models.factory import build_main_net
 from src.models.ddpm_net import ComplexDDPMNet          # 复数 DDPM 网络
 from src.data.dataset import create_dataloader
 from src.optics.propagation import propagator_factory
@@ -209,6 +209,15 @@ def main():
     parser.add_argument('--bypass-ddpm-network', action='store_true')
     parser.add_argument('--ckpt-path', type=str, required=True)
     parser.add_argument('--ddpm-ckpt-path', type=str, default=None)
+    parser.add_argument('--model-arch', default='holonet',
+                        choices=['holonet', 'unet'],
+                        help='Main network architecture')
+    parser.add_argument('--unet-depth', type=int, default=3,
+                        help='ComplexUNet downsample levels')
+    parser.add_argument('--unet-base-filters', type=int, default=24,
+                        help='ComplexUNet base filters (shallowest level)')
+    parser.add_argument('--unet-attention', action='store_true',
+                        help='Enable bottleneck self-attention in ComplexUNet')
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -230,15 +239,15 @@ def main():
         "depth_shift": args.depth_shift,
     }
 
-    # 主网络：ComplexHoloNet
-    holonet = ComplexHoloNet(
+    # 主网络（按 arch 构建）
+    holonet = build_main_net(
+        arch=args.model_arch,
         input_dim=4,
         num_layers=args.num_layers,
         num_filters_per_layer=args.num_filters_per_layer,
-        interleave_rate=1,
-        filter_width=3,
-        bias_stddev=0.01,
-        weight_var_scale=0.25
+        unet_depth=args.unet_depth,
+        unet_base_filters=args.unet_base_filters,
+        unet_attention=args.unet_attention,
     ).to(device)
     load_model_weights(holonet, args.ckpt_path, device)
 
