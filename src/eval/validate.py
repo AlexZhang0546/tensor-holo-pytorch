@@ -200,7 +200,11 @@ def main():
     parser.add_argument('--num-filters-per-layer', default=24, type=int)
     parser.add_argument('--batch', default=2, type=int)
     parser.add_argument('--padding', default=0, type=int)
-    parser.add_argument('--depth-shift', default=12.0, type=float)
+    parser.add_argument('--depth-shift', dest='depth_shift', default=12.0,
+                        type=float)
+    # 别名：与原始 main_v2.py 的参数名保持一致
+    parser.add_argument('--train-depth-shift', dest='depth_shift',
+                        default=12.0, type=float, help=argparse.SUPPRESS)
     parser.add_argument('--activate-ddpm', action='store_true')
     parser.add_argument('--bypass-ddpm-network', action='store_true')
     parser.add_argument('--ckpt-path', type=str, required=True)

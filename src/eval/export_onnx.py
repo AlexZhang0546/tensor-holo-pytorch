@@ -96,8 +96,13 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt-path", type=str, required=True, help="Path to PyTorch checkpoint")
     parser.add_argument("--ddpm-ckpt-path", type=str, default=None, help="Separate DDPM checkpoint")
     parser.add_argument("--output", type=str, default="inference_graph_v2.onnx")
-    parser.add_argument("--res-h", type=int, default=1080)
-    parser.add_argument("--res-w", type=int, default=1920)
+    parser.add_argument("--res-h", dest="res_h", type=int, default=1080)
+    parser.add_argument("--res-w", dest="res_w", type=int, default=1920)
+    # 别名：与原始 main_v2.py 的 export 参数名保持一致
+    parser.add_argument("--trt-res-h", dest="res_h", type=int, default=1080,
+                        help=argparse.SUPPRESS)
+    parser.add_argument("--trt-res-w", dest="res_w", type=int, default=1920,
+                        help=argparse.SUPPRESS)
     parser.add_argument("--pad", type=int, default=0, help="Padding size")
     parser.add_argument("--input-dim", type=int, default=4, help="Input channels (4 for single RGBD)")
     parser.add_argument("--activate-ddpm", action="store_true")

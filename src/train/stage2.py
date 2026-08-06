@@ -39,8 +39,13 @@ def parse_args():
     parser.add_argument('--pitch', default=0.008, type=float)
     parser.add_argument('--num-layers', default=30, type=int)
     parser.add_argument('--num-filters-per-layer', default=24, type=int)
-    parser.add_argument('--epoch-to-start-ddpm', default=3000, type=int,
+    parser.add_argument('--epoch-to-start-ddpm', dest='epoch_to_start_ddpm',
+                        default=3000, type=int,
                         help='(informational) epoch at which stage2 begins')
+    # 别名：与原始 main_v2.py 的参数名保持一致
+    parser.add_argument('--epoch_to_start_ddpm_training',
+                        dest='epoch_to_start_ddpm', default=3000, type=int,
+                        help=argparse.SUPPRESS)
     parser.add_argument('--stage2-epochs', default=50, type=int,
                         help='Number of epochs for identity pretraining')
     parser.add_argument('--joint-epochs', default=200, type=int,
@@ -62,8 +67,12 @@ def parse_args():
                         help='If true, DDPM network is not used, only main network is trained.')
     parser.add_argument('--padding', default=0, type=int,
                         help='Padding for out-of-frame diffraction')
-    parser.add_argument('--depth-shift', default=12.0, type=float,
+    parser.add_argument('--depth-shift', dest='depth_shift', default=12.0,
+                        type=float,
                         help='Depth shift from midpoint hologram (mm)')
+    # 别名：与原始 main_v2.py 的参数名保持一致
+    parser.add_argument('--train-depth-shift', dest='depth_shift',
+                        default=12.0, type=float, help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
