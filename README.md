@@ -263,25 +263,6 @@ ONNX 不支持复数张量与 FFT/IFFT，因此导出时把网络输出拆为 `r
   （`src/models/complex_layers.py`），保证 eval 模式下数值稳定。
 - **波长**：默认 `[450, 520, 638] nm`；深度映射 `depth_base=-3`、`depth_scale=6`。
 
-## 验证记录（本仓库实测，2026-08）
-
-- Stage 1 验证（`full_loss` 配置、384 分辨率）：`SSIM_amp ≈ 0.9443`，`PSNR ≈ 33.14 dB`。
-- Stage 2 短测（干净重训）：identity 10 epoch 恒等 SSIM 收敛至 `0.979`；
-  joint 5 epoch 验证 `SSIM_img` 由 `0.663` 单调上升至 `0.723`（仍在上升）。
-- 论文数值对应 `SSIM_img`（焦栈图像 SSIM）；原版训练中 joint 阶段约为 1000 epoch
-  （`num_epochs=4050` 起于 `epoch_to_start_ddpm_training=3000`），达到论文水平需要完整训练量。
-
-## 常见问题
-
-**Q：提示 `No module named 'tfrecord'`？**
-A：执行 `pip install tfrecord`，该包不依赖 TensorFlow。
-
-**Q：找不到 TFRecord 文件？**
-A：按“数据准备”一节的路径约定放置数据，并确认 `--dataset-res` 与实际目录一致。
-
-**Q：训练时 GPU 显存不足？**
-A：减小 `--batch` 或 `--dataset-res`（如 128），也可减小 `--num-filters-per-layer`。
-
 ## 引用与许可
 
 本移植参照以下工作（引用信息来自原仓库 README）：
