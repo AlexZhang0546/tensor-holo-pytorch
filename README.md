@@ -126,6 +126,27 @@ python main.py --train-mode --train-stage stage1 \
 - 保存 `stage1_epoch_{epoch:04d}.pth` 与 `stage1_latest.pth`。
 - 断点续训：加 `--restore`（`--ckpt-dir` 指定目录时从该目录的 `stage1_latest.pth` 恢复）。
 
+### 主网络架构（`--model-arch`）
+
+主网络通过 `--model-arch` 选择，两阶段训练 / 验证 / 评估 / 导出全程生效：
+
+- `holonet`（默认）：原 `ComplexHoloNet` 深残差序列（`--num-layers` / `--num-filters-per-layer`）。
+- `unet`：多尺度 `ComplexUNet` 编码器-解码器，全链路复数运算
+  （复数残差块 + stride=2 复数卷积下采样 + 复数转置卷积上采样 + 跳跃连接，
+  瓶颈层可选自注意力），输出为同分辨率复数场、无激活。
+
+```bash
+# 用 ComplexUNet 训练 stage1（depth=3 次下采样，最浅层 24 通道，启用自注意力）
+python main.py --train-mode --train-stage stage1 \
+  --model-arch unet --unet-depth 3 --unet-base-filters 24 --unet-attention \
+  --dataset-res 384 --num-epochs 200 --batch 2 --learning-rate 1e-4
+```
+
+UNet 相关参数：`--unet-depth`（下采样级数，默认 3）、`--unet-base-filters`
+（最浅层通道数，默认 24，逐级翻倍）、`--unet-attention`（瓶颈自注意力，默认关闭）。
+输入分辨率任意（内部按 `2^depth` 对齐），但 checkpoint 与网络结构绑定，
+同一目录下请勿混用 `holonet` / `unet` checkpoint。
+
 ### 训练 Stage 2（identity 预训练 + joint 联合训练）
 
 ```bash
@@ -223,6 +244,10 @@ python test_onnx.py --ckpt model/.../stage2_joint_latest.pth --activate-ddpm --r
 | `--pitch` | 0.008 | 像素尺寸（mm） |
 | `--num-layers` | 30 | HoloNet 层数 |
 | `--num-filters-per-layer` | 24 | 每层滤波器数 |
+| `--model-arch` | `holonet` | 主网络架构（`holonet` / `unet`） |
+| `--unet-depth` | 3 | ComplexUNet 下采样级数 |
+| `--unet-base-filters` | 24 | ComplexUNet 最浅层通道数（逐级翻倍） |
+| `--unet-attention` | False | ComplexUNet 瓶颈层自注意力 |
 | `--model-name` | `full_loss` | 模型名（用于 checkpoint 目录命名） |
 | `--num-epochs` | 4050 | Stage 1 训练总 epoch 数 |
 | `--epoch_to_start_ddpm_training` | 3000 | 信息性参数（移植版中训练已拆分为两个脚本） |
