@@ -91,7 +91,9 @@ class ComplexBatchNorm2d(nn.Module):
 
         if self.track_running_stats:
             self.register_buffer('running_mean', torch.zeros(num_features, 2))
-            self.register_buffer('running_cov', torch.ones(num_features, 3))
+            running_cov = torch.ones(num_features, 3)
+            running_cov[:, 2] = 0.0   # V_ri 初始为 0（对角协方差），否则 eval 模式 det=0 导致除零放大
+            self.register_buffer('running_cov', running_cov)
             self.register_buffer('num_batches_tracked', torch.tensor(0, dtype=torch.long))
         else:
             self.register_buffer('running_mean', None)

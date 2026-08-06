@@ -170,6 +170,11 @@ def compute_focal_stack_loss(
     """
     # 提取深度图（假设 depth 在通道 3，形状 (B, 1, H, W)）
     depth = rgbd[:, 3:4, :, :]   # (B, 1, H, W)
+    # 空间权重使用与全息图一致的填充尺寸，保证 pad>0 时与裁剪后的图像对齐
+    if pad > 0:
+        depth_padded = F.pad(depth, (pad, pad, pad, pad), mode='constant', value=0.0)
+    else:
+        depth_padded = depth
 
     # 从参数中读取数值
     depth_scale = hologram_params['depth_scale']
@@ -186,7 +191,7 @@ def compute_focal_stack_loss(
     N_focus = depth_to_focus_norm.shape[1]  # num_top + num_random
 
     # 2. 将深度值缩放到实际物理范围
-    depth_phys = depth * depth_scale + depth_base               # (B, 1, H, W)
+    depth_phys = depth_padded * depth_scale + depth_base       # (B, 1, H+2pad, W+2pad)
     depth_to_focus_phys = depth_to_focus_norm * depth_scale + depth_base  # (B, N_focus)
 
     # 3. 逐样本、逐焦点计算损失

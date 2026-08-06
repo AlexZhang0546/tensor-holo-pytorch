@@ -133,7 +133,6 @@ def _run_stage2_forward(
       双相位编码(aadpm)和光圈滤波(filter_phs_only)现在接收正确的phs_max，
       并启用归一化/反归一化流程，避免相位值域越界。
     """
-    print("holonet training:", holonet.training)
     device = rgbd.device
     wavelengths_tensor = torch.tensor(hologram_params['wavelengths'], device=device).view(1, -1, 1, 1)
 
@@ -157,11 +156,9 @@ def _run_stage2_forward(
         holo_altered = holo_shifted
         phs_for_reg = None
 
-    # ----- 关键修复：获取相位最大值并传递给后续模块 -----
-    # 默认三个通道均为 2π，与 evaluate.py 保持一致
-    phs_max = loss_params.get('phs_max', [2.0 * np.pi] * 3)
-
-    # 5. 双相位编码 (AA-DPM)，现在传入 phs_max 并开启 normalize
+    # 注意：本训练管线中 DPM/孔径滤波全程使用弧度（normalize=False、未传 phs_max），
+    # 与 evaluate.py 的 [0,1] 归一化+phs_max 路径不同；两者各自自洽，不要混用。
+    # 5. 双相位编码 (AA-DPM)，全程弧度模式（normalize=False）
     phs_only, amp_max = aadpm(
         holo_altered,
         propagator=propagator_pad,
@@ -210,7 +207,8 @@ def _run_stage2_forward(
 
     # 9. 振幅图 SSIM/PSNR（裁剪有效区域后与目标振幅比较）
     amp_crop = amp_final[:, :, pad:pad + hologram_params['res_h'], pad:pad + hologram_params['res_w']]
-    amp_gt_crop = amp_gt[:, :, pad:pad + hologram_params['res_h'], pad:pad + hologram_params['res_w']]
+    # amp_gt 未填充，尺寸与裁剪后的 amp_crop（res_h x res_w）一致，直接使用即可
+    amp_gt_crop = amp_gt
     ssim_amp = compute_ssim(amp_crop, amp_gt_crop, data_range=1.0)
     psnr_amp = compute_psnr(amp_crop, amp_gt_crop, data_range=1.0)
 
@@ -410,8 +408,6 @@ def train_stage2(
             rgbd = batch_data['rgbd'].to(device)
             amp_gt = batch_data['amp_4'].to(device)
             phs_gt = batch_data['phs_4'].to(device)
-            print("DIAG rgbd shape:", rgbd.shape, "mean:", rgbd.mean().item(), "min:", rgbd.min().item(), "max:", rgbd.max().item())
-            print("DIAG amp_gt mean:", amp_gt.mean().item(), "max:", amp_gt.max().item())
 
             # 使用修复后的前向函数
             outputs = _run_stage2_forward(
@@ -484,7 +480,6 @@ def train_stage2(
                 holonet.train()
                 if ddpm_net is not None:
                     ddpm_net.train()
-                    ddpm_net.eval()
 
         # 每个 epoch 结束后保存 checkpoint
         save_dict = {
