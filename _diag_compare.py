@@ -30,6 +30,14 @@ holo_gt = compl_val(amp_gt, (phs_gt - 0.5) * 2.0 * np.pi)
 
 with torch.no_grad():
     holo_shift = prop(holo_gt, 12.0) * compl_exp(-2 * np.pi * 12.0 / wt)
+    amp_in = holo_shift.abs()
+    phs_in = holo_shift.angle()
+    amp_max_per = amp_in.amax(dim=(2, 3), keepdim=True) + 1e-6
+    amp_n = amp_in / amp_max_per
+    offset = torch.acos(torch.clamp(amp_n, min=-1.0 + 1e-7, max=1.0 - 1e-7))
+    phs_zero_mean = phs_in - phs_in.mean(dim=[2, 3], keepdim=True)
+    phs_low = phs_zero_mean - offset
+    phs_high = phs_zero_mean + offset
     phs_only, amp_max = aadpm(
         holo_shift, propagator=prop, depth_shift=0.0,
         adaptive_phs_shift=False, batch=1, num_channels=3,
@@ -63,3 +71,24 @@ compare("amp_out", amp_out, load("orig_amp_out"))
 compare("phs_out", phs_out, load("orig_phs_out"))
 print("port amp_max:", [round(v, 4) for v in amp_max.flatten().tolist()])
 print("orig amp_max: 1.3270")
+
+# 保存端口中间量
+np.save(os.path.join(DUMP, "port_phs_only.npy"), phs_only.detach().cpu().numpy()[0])
+np.save(os.path.join(DUMP, "port_phs_low.npy"), phs_low.detach().cpu().numpy()[0])
+np.save(os.path.join(DUMP, "port_amp_out.npy"), amp_out.detach().cpu().numpy()[0])
+
+# 差异分布分析
+import collections
+d_phs = np.abs(phs_only.detach().cpu().numpy()[0] - load("orig_phs_only"))
+for th in [0.01, 0.1, 1.0, 3.0, 6.0]:
+    frac = (d_phs > th).mean()
+    print("phs_only diff > %.2f: %.4f%%" % (th, 100 * frac))
+# 用 sin/cos 比较相位（消除 2π 歧义）
+pp = phs_only.detach().cpu().numpy()[0]
+po = load("orig_phs_only")
+err_cos = np.abs(np.cos(pp) - np.cos(po)).max()
+err_sin = np.abs(np.sin(pp) - np.sin(po)).max()
+print("max |cos diff| %.6f  max |sin diff| %.6f" % (err_cos, err_sin))
+# 在 sin/cos 意义下 >0.1 的比例
+ang_err = np.arccos(np.clip(np.cos(pp - po), -1, 1))
+print("phase angle err > 0.1 rad: %.4f%%" % (100 * (ang_err > 0.1).mean()))
