@@ -1,79 +1,122 @@
-# src/optics/complex_utils.py
 """
-复数运算与二维傅里叶变换工具函数。
-替代原 TensorFlow 版本中的：
-    - tf_compl_exp
-    - tf_compl_val
-    - tf_fft2d
-    - tf_ifft2d
-    - tf_fftshift2d
-    - tf_ifftshift2d
-
-所有函数均接受形状为 (B, C, H, W) 的张量（NCHW），
-并返回形状相同的张量。
+复数构造、FFT/IFT、频移（fftshift/ifftshift）等基础工具函数。
+完全替代原 TensorFlow optics.py 中的 tf_compl_*, tf_fft2d, tf_ifft2d,
+tf_fftshift2d, tf_ifftshift2d，并保持与 NCHW 数据格式一致。
 """
 
 import torch
 import numpy as np
 
 
-def compl_exp(phase: torch.Tensor) -> torch.Tensor:
+# ----------------------------------------------------------------------
+# 复数构造
+# ----------------------------------------------------------------------
+def compl_exp(phase: torch.Tensor, dtype: torch.dtype = torch.complex64) -> torch.Tensor:
     """
-    复数指数 e^{i * phase}。
-    输入：实数张量 phase (任意形状)，相位以弧度为单位。
-    输出：复数张量 (cos(phase) + i * sin(phase))。
+    根据相位（-π~π）构造单位复数：exp(j * phase)。
+    替代 tf_compl_exp。
+    
+    Args:
+        phase: 实数张量，任意形状，数值范围通常为 [-π, π]。
+        dtype: 输出复数类型，默认 torch.complex64。
+    
+    Returns:
+        复数张量，形状与 phase 相同。
     """
-    return torch.complex(torch.cos(phase), torch.sin(phase))
+    # torch.polar 可一步生成复数，但要求振幅为 1
+    ones = torch.ones_like(phase, dtype=phase.dtype if phase.is_floating_point() else torch.float32)
+    return torch.polar(ones, phase).to(dtype)
 
 
-def compl_val(amplitude: torch.Tensor, phase: torch.Tensor) -> torch.Tensor:
+def compl_val(amplitude: torch.Tensor, phase: torch.Tensor, dtype: torch.dtype = torch.complex64) -> torch.Tensor:
     """
-    由振幅和相位构造复数：amplitude * e^{i * phase}。
-    输入：
-        amplitude: 非负实数张量
-        phase:     实数张量（弧度）
-    输出：复数张量。
+    根据振幅和相位构造复数：amplitude * exp(j * phase)。
+    替代 tf_compl_val。
+    
+    Args:
+        amplitude: 振幅张量，非负实数。
+        phase:     相位张量，-π~π。
+        dtype:     输出复数类型。
+    
+    Returns:
+        复数张量。
     """
-    return amplitude * compl_exp(phase)
+    # 确保振幅和相位同设备、同数据类型（但可以是不同浮点型，polar 会自动转换）
+    # torch.polar 需要两个相同 dtype 的张量，我们在内部转换
+    amp = amplitude.to(dtype=torch.float32 if amplitude.dtype != torch.float64 else torch.float64)
+    phs = phase.to(dtype=amp.dtype)
+    return torch.polar(amp, phs).to(dtype)
 
 
-def fft2d(x: torch.Tensor) -> torch.Tensor:
+# ----------------------------------------------------------------------
+# 2D FFT / IFFT（NCHW 布局）
+# ----------------------------------------------------------------------
+def fft2d(x: torch.Tensor, dim: tuple = (-2, -1)) -> torch.Tensor:
     """
-    对最后两维进行二维快速傅里叶变换。
-    输入：
-        x: (B, C, H, W) 实数或复数张量
-    输出：
-        复数频谱，形状不变，fft 在 (H, W) 维度执行。
+    对输入张量的最后两个维度进行 2D 快速傅里叶变换。
+    替代 tf_fft2d，保持 NCHW 不变。
+    
+    Args:
+        x:   输入张量，形状 (B, C, H, W)，可为实数或复数。
+        dim: 进行 FFT 的维度，默认最后两维。
+    
+    Returns:
+        复数张量，形状不变。
     """
     if not x.is_complex():
         x = torch.complex(x, torch.zeros_like(x))
-    return torch.fft.fft2(x, dim=(-2, -1))
+    return torch.fft.fft2(x, dim=dim, norm='ortho')
 
 
-def ifft2d(x: torch.Tensor) -> torch.Tensor:
+def ifft2d(x: torch.Tensor, dim: tuple = (-2, -1)) -> torch.Tensor:
     """
-    对最后两维进行二维快速傅里叶逆变换（无缩放，即 "backward" 模式）。
-    输入：
-        x: (B, C, H, W) 复数张量
-    输出：
-        复数场，形状不变。
+    对输入张量的最后两个维度进行 2D 逆快速傅里叶变换。
+    替代 tf_ifft2d。
+    
+    Args:
+        x: 复数张量。
+        dim: 进行 IFFT 的维度。
+    
+    Returns:
+        复数张量。
     """
     if not x.is_complex():
         x = torch.complex(x, torch.zeros_like(x))
-    return torch.fft.ifft2(x, dim=(-2, -1))
+    return torch.fft.ifft2(x, dim=dim, norm='ortho')
 
 
-def fftshift2d(x: torch.Tensor, input_shape=None) -> torch.Tensor:
+# ----------------------------------------------------------------------
+# fftshift / ifftshift for NCHW tensors (applied to last two dims)
+# ----------------------------------------------------------------------
+def fftshift2d(x: torch.Tensor, dim: tuple = (-2, -1)) -> torch.Tensor:
     """
-    将零频率分量移到频谱中心（fftshift），沿最后两维操作。
-    等效于 tf_fftshift2d，input_shape 参数保留但不再使用（PyTorch 自动处理奇偶）。
+    对最后两个空间维度进行 fftshift（将零频率移到图像中心）。
+    替代 tf_fftshift2d。
+    
+    Args:
+        x: 输入张量，形状 (..., H, W)。
+        dim: 要进行移位的两个维度。
+    
+    Returns:
+        移位后的张量。
     """
-    return torch.fft.fftshift(x, dim=(-2, -1))
+    # 对每个维度进行 roll，移动量为 (size + 1) // 2
+    shifts = [(x.shape[d] + 1) // 2 for d in dim]
+    # torch.roll 可以同时指定 shifts 和 dims
+    return torch.roll(x, shifts=shifts, dims=dim)
 
 
-def ifftshift2d(x: torch.Tensor, input_shape=None) -> torch.Tensor:
+def ifftshift2d(x: torch.Tensor, dim: tuple = (-2, -1)) -> torch.Tensor:
     """
-    fftshift 的逆操作，将中心零频移回角落。
-    等效于 tf_ifftshift2d。
+    对最后两个空间维度进行 ifftshift（将零频率从图像中心移回角落）。
+    替代 tf_ifftshift2d。
+    
+    Args:
+        x: 输入张量。
+        dim: 要进行移位的两个维度。
+    
+    Returns:
+        移位后的张量。
     """
-    return torch.fft.ifftshift(x, dim=(-2, -1))
+    shifts = [x.shape[d] // 2 for d in dim]   # ifftshift 的移动量是 size // 2
+    return torch.roll(x, shifts=shifts, dims=dim)
