@@ -52,7 +52,6 @@ def main():
         idx = np.unravel_index(np.argmax(d), d.shape)
         print(f"{tag}: max={d.max():.4e} mean={d.mean():.4e} "
               f"argmax={idx} torch={a[idx]:.4f} onnx={b[idx]:.4f}")
-        amp_a = np.sqrt(a ** 2 + b_none if False else 0)  # placeholder
 
     # 主网络输出（不含 DDPM）对比
     report("holonet real", tr, orr)
