@@ -41,19 +41,16 @@ Holographic Display*，Shi et al., Light: Science and Applications, 2022）的 P
 │   ├── losses/
 │   │   ├── complex_losses.py# 复数全息损失（复数域）
 │   │   ├── focal_stack.py   # 焦栈感知损失（含 SSIM/PSNR 指标）
-│   │   ├── holo_loss.py     # 全息图振幅-相位损失（保留）
 │   │   └── ddpm_loss.py     # DDPM 相位均值/标准差正则
 │   ├── train/
 │   │   ├── stage1.py        # 阶段一训练（主网络）
 │   │   ├── stage2.py        # 阶段二训练（identity + joint）
-│   │   └── trainer.py       # 训练基类（保留）
 │   ├── eval/
 │   │   ├── validate.py      # 批量验证（stage1 / stage2）
 │   │   ├── evaluate.py      # 单张 RGB-D 推理
 │   │   └── export_onnx.py   # 导出 ONNX
 │   └── utils/
 │       ├── metrics.py       # SSIM / PSNR（替代 tf.image.ssim / psnr）
-│       ├── weight_init.py   # 权重初始化
 │       └── visualizer.py    # 可视化（预留）
 ├── data/                    # 数据集目录（TFRecord，需自行准备）
 ├── model/                   # checkpoint 默认保存目录
