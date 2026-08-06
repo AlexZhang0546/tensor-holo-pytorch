@@ -44,9 +44,11 @@ with torch.no_grad():
     amp_2x2 = torch.complex(real, imag).abs()  # (B,C,192,192) 下采样振幅
     phs_2x2 = torch.complex(real, imag).angle()
     # 用 2x2 平均重建后的场（192x192），双线性上采样到 384
-    holo_avg = torch.nn.functional.interpolate(
-        torch.complex(real, imag), scale_factor=2, mode="bilinear",
-        align_corners=False)
+    up = torch.nn.functional.interpolate
+    holo_avg = torch.complex(up(real, scale_factor=2, mode="bilinear",
+                                align_corners=False),
+                             up(imag, scale_factor=2, mode="bilinear",
+                                align_corners=False))
 
     for focus in [-3.0, 0.0, 3.0]:
         img_gt = prop(holo_gt, -focus).abs()
