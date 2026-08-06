@@ -83,8 +83,8 @@ def compare(tag, torch_model, onnx_path, x, tol=2e-4):
     scale = max(float(np.abs(tr).max()), float(np.abs(ti).max()), 1e-6)
     rel = max(dr, di) / scale
 
-    amp_t = torch.from_numpy(np.sqrt(tr ** 2 + ti ** 2)).unsqueeze(0)
-    amp_o = torch.from_numpy(np.sqrt(orr ** 2 + oi ** 2)).unsqueeze(0)
+    amp_t = torch.from_numpy(np.sqrt(tr ** 2 + ti ** 2))
+    amp_o = torch.from_numpy(np.sqrt(orr ** 2 + oi ** 2))
     ssim = float(compute_ssim(
         amp_t, amp_o, data_range=max(float(amp_t.max()), 1e-6)).item())
 
