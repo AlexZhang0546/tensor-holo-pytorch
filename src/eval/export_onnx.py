@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from src.models.holonet import ComplexHoloNet
+from src.models.factory import build_main_net
 from src.models.ddpm_net import ComplexDDPMNet
 from typing import Optional
 
@@ -110,14 +110,27 @@ if __name__ == "__main__":
     parser.add_argument("--activate-ddpm", action="store_true")
     parser.add_argument("--num-layers", type=int, default=30)
     parser.add_argument("--num-filters-per-layer", type=int, default=24)
+    parser.add_argument("--model-arch", default="holonet",
+                        choices=["holonet", "unet"],
+                        help="Main network architecture")
+    parser.add_argument("--unet-depth", type=int, default=3,
+                        help="ComplexUNet downsample levels")
+    parser.add_argument("--unet-base-filters", type=int, default=24,
+                        help="ComplexUNet base filters (shallowest level)")
+    parser.add_argument("--unet-attention", action="store_true",
+                        help="Enable bottleneck self-attention in ComplexUNet")
 
     args = parser.parse_args()
 
     device = "cpu"  # 导出一般用 CPU 即可
-    holonet = ComplexHoloNet(
+    holonet = build_main_net(
+        arch=args.model_arch,
         input_dim=args.input_dim,
         num_layers=args.num_layers,
-        num_filters_per_layer=args.num_filters_per_layer
+        num_filters_per_layer=args.num_filters_per_layer,
+        unet_depth=args.unet_depth,
+        unet_base_filters=args.unet_base_filters,
+        unet_attention=args.unet_attention,
     ).to(device)
 
     # 加载权重
