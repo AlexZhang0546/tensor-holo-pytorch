@@ -126,7 +126,13 @@ class ComplexDDPMNet(nn.Module):
             field_complex = self._complex_deinterleave(self.interleave_rate, field_complex)
         # 现在形状为 (B, 3, H, W)
 
-        # 5. 直接返回复数场，不做额外的振幅/相位分离
+        # 5. 振幅限幅：输出振幅不超过输入每通道最大振幅。
+        #    对应原始 TF 实现中 tanh 输出上界（避免离群尖峰把 DPM 的 amp_max
+        #    顶得过大，导致整体重建尺度失真）。
+        if field_complex.shape == x.shape:
+            max_in = x.abs().amax(dim=(2, 3), keepdim=True)
+            scale = torch.clamp(max_in / (field_complex.abs() + 1e-6), max=1.0)
+            field_complex = field_complex * scale
         return field_complex
 
 
