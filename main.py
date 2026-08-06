@@ -8,9 +8,6 @@ CLI 参数实现参照原始 TensorFlow 项目 main_v2.py：
   - 参数名与默认值与原始实现保持一致，例如 --epoch_to_start_ddpm_training、
     --train-depth-shift、--phs-max、--trt-res-h/w 等；
   - checkpoint 目录命名遵循 main_v2.py 的 checkpoint_base_path 约定。
-
-同时保留原有 subcommand 接口（train_stage1 / train_stage2 / validate / evaluate /
-export），两种调用方式等价。
 """
 
 import argparse
@@ -28,10 +25,6 @@ import src.train.stage2 as stage2_module
 import src.eval.validate as validate_module
 from src.eval.evaluate import evaluate as run_evaluate
 import src.eval.export_onnx as export_module
-
-# 旧 subcommand 接口的模式名
-LEGACY_MODES = {"train_stage1", "train_stage2", "validate", "evaluate", "export"}
-
 
 # ----------------------------------------------------------------------
 # checkpoint 路径约定（与 main_v2.py 的 checkpoint_base_path 一致）
@@ -383,147 +376,9 @@ def _original_style_main():
      "validate": validate_module, "export": export_module}[mode].main()
 
 
-# ----------------------------------------------------------------------
-# 旧 subcommand 接口（保持兼容）
-# ----------------------------------------------------------------------
-def build_legacy_parser():
-    parser = argparse.ArgumentParser(description="Tensor Holography PyTorch")
-    subparsers = parser.add_subparsers(dest="mode", required=True,
-                                       help="Operating mode")
-
-    parser_s1 = subparsers.add_parser("train_stage1")
-    parser_s1.add_argument("--model-name", default="full_loss")
-    parser_s1.add_argument("--dataset-res", type=int, default=192)
-    parser_s1.add_argument("--pitch", type=float, default=0.008)
-    parser_s1.add_argument("--num-layers", type=int, default=30)
-    parser_s1.add_argument("--num-filters-per-layer", type=int, default=24)
-    parser_s1.add_argument("--num-epochs", type=int, default=4050)
-    parser_s1.add_argument("--batch", type=int, default=2)
-    parser_s1.add_argument("--learning-rate", type=float, default=1e-4)
-    parser_s1.add_argument("--restore", action="store_true")
-    parser_s1.add_argument("--ckpt-dir", default=None)
-    parser_s1.add_argument("--num-iter-per-test", type=int, default=1000)
-    parser_s1.add_argument("--active-max-ldi-layer", type=int, default=0)
-
-    parser_s2 = subparsers.add_parser("train_stage2")
-    parser_s2.add_argument("--model-name", default="full_loss")
-    parser_s2.add_argument("--dataset-res", type=int, default=192)
-    parser_s2.add_argument("--pitch", type=float, default=0.008)
-    parser_s2.add_argument("--num-layers", type=int, default=30)
-    parser_s2.add_argument("--num-filters-per-layer", type=int, default=24)
-    parser_s2.add_argument("--batch", type=int, default=2)
-    parser_s2.add_argument("--learning-rate", type=float, default=1e-4)
-    parser_s2.add_argument("--stage1-ckpt", type=str, required=True)
-    parser_s2.add_argument("--activate-ddpm", action="store_true")
-    parser_s2.add_argument("--bypass-ddpm-network", action="store_true")
-    parser_s2.add_argument("--padding", type=int, default=0)
-    parser_s2.add_argument("--depth-shift", type=float, default=12.0)
-    parser_s2.add_argument("--stage2-ckpt-dir", default=None)
-    parser_s2.add_argument("--restore-stage2", action="store_true")
-    parser_s2.add_argument("--stage2-epochs", type=int, default=50)
-    parser_s2.add_argument("--joint-epochs", type=int, default=200)
-    parser_s2.add_argument("--restore-stage1", action="store_true")
-    parser_s2.add_argument("--epoch-to-start-ddpm", type=int, default=3000)
-    parser_s2.add_argument("--num-iter-per-test", type=int, default=500)
-
-    parser_val = subparsers.add_parser("validate")
-    parser_val.add_argument("--val-mode", type=str, required=True,
-                            choices=["stage1", "stage2"], help="Validation stage")
-    parser_val.add_argument("--ckpt-path", type=str, required=True)
-    parser_val.add_argument("--ddpm-ckpt-path", type=str, default=None)
-    parser_val.add_argument("--model-name", default="full_loss")
-    parser_val.add_argument("--dataset-res", type=int, default=192)
-    parser_val.add_argument("--pitch", type=float, default=0.008)
-    parser_val.add_argument("--num-layers", type=int, default=30)
-    parser_val.add_argument("--num-filters-per-layer", type=int, default=24)
-    parser_val.add_argument("--batch", type=int, default=2)
-    parser_val.add_argument("--padding", type=int, default=0)
-    parser_val.add_argument("--depth-shift", type=float, default=12.0)
-    parser_val.add_argument("--activate-ddpm", action="store_true")
-    parser_val.add_argument("--bypass-ddpm-network", action="store_true")
-
-    parser_eval = subparsers.add_parser("evaluate")
-    parser_eval.add_argument("--ckpt-path", type=str, required=True)
-    parser_eval.add_argument("--ddpm-ckpt-path", type=str, default=None)
-    parser_eval.add_argument("--activate-ddpm", action="store_true")
-    parser_eval.add_argument("--bypass-ddpm-network", action="store_true")
-    parser_eval.add_argument("--num-layers", type=int, default=30)
-    parser_eval.add_argument("--num-filters-per-layer", type=int, default=24)
-    parser_eval.add_argument("--active-max-ldi-layer", type=int, default=0)
-    parser_eval.add_argument("--eval-res-h", type=int, default=1080)
-    parser_eval.add_argument("--eval-res-w", type=int, default=1920)
-    parser_eval.add_argument("--eval-rgb-path", type=str, required=True)
-    parser_eval.add_argument("--eval-depth-path", type=str, required=True)
-    parser_eval.add_argument("--eval-output-path", type=str, required=True)
-    parser_eval.add_argument("--eval-depth-shift", type=float, default=0.0)
-    parser_eval.add_argument("--padding", type=int, default=0)
-    parser_eval.add_argument("--use-maimone-dpm", action="store_true")
-    parser_eval.add_argument("--use-bldpm", action="store_true")
-    parser_eval.add_argument("--adaptive-phs-shift", action="store_true")
-    parser_eval.add_argument("--gaussian-sigma", type=float, default=0.0)
-    parser_eval.add_argument("--gaussian-width", type=int, default=3)
-    parser_eval.add_argument("--phs-max", type=float, default=2.0)
-    parser_eval.add_argument("--k", type=float, default=1.0)
-    parser_eval.add_argument("--pitch", type=float, default=0.008)
-
-    parser_export = subparsers.add_parser("export")
-    parser_export.add_argument("--ckpt-path", type=str, required=True)
-    parser_export.add_argument("--ddpm-ckpt-path", type=str, default=None)
-    parser_export.add_argument("--output", type=str, default="model.onnx")
-    parser_export.add_argument("--res-h", type=int, default=1080)
-    parser_export.add_argument("--res-w", type=int, default=1920)
-    parser_export.add_argument("--pad", type=int, default=0)
-    parser_export.add_argument("--input-dim", type=int, default=4)
-    parser_export.add_argument("--activate-ddpm", action="store_true")
-    parser_export.add_argument("--num-layers", type=int, default=30)
-    parser_export.add_argument("--num-filters-per-layer", type=int, default=24)
-    return parser
-
-
-def build_argv(args_dict, exclude_keys=("mode",)):
-    """将参数字典正确转换为命令行参数列表，正确处理 store_true 布尔值。"""
-    cmd = [sys.argv[0]]
-    for k, v in args_dict.items():
-        if k in exclude_keys:
-            continue
-        if isinstance(v, bool):
-            if v:
-                cmd.append("--%s" % k.replace("_", "-"))
-        else:
-            if v is not None:
-                cmd.append("--%s=%s" % (k.replace("_", "-"), v))
-    return cmd
-
-
-def _legacy_main():
-    args = build_legacy_parser().parse_args()
-
-    if args.mode == "train_stage1":
-        sys.argv = build_argv(vars(args))
-        stage1_module.main()
-    elif args.mode == "train_stage2":
-        sys.argv = build_argv(vars(args))
-        stage2_module.main()
-    elif args.mode == "validate":
-        sys.argv = build_argv(vars(args))
-        validate_module.main()
-    elif args.mode == "evaluate":
-        run_evaluate(args)
-    elif args.mode == "export":
-        sys.argv = build_argv(vars(args))
-        export_module.main()
-    else:
-        build_legacy_parser().print_help()
-
-
 def main():
-    argv = sys.argv[1:]
-    if argv and argv[0] in LEGACY_MODES:
-        # 旧 subcommand 接口
-        _legacy_main()
-    else:
-        # 原始风格（参照 main_v2.py）
-        _original_style_main()
+    # 原始风格（参照 main_v2.py）
+    _original_style_main()
 
 
 if __name__ == "__main__":
