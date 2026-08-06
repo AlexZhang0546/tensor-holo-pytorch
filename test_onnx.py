@@ -53,8 +53,11 @@ def build_models(ckpt_path, activate_ddpm, input_dim=4, arch="holonet",
     ckpt = torch.load(ckpt_path, map_location="cpu")
     holonet = build_main_net(
         arch=arch,
-        input_dim=input_dim, num_layers=30, num_filters_per_layer=24
-        , unet_depth=unet_depth, unet_base_filters=unet_base_filters,
+        input_dim=input_dim,
+        num_layers=30,
+        num_filters_per_layer=24,
+        unet_depth=unet_depth,
+        unet_base_filters=unet_base_filters,
         unet_attention=unet_attention,
     ).eval()
     if "model_state_dict" in ckpt:
