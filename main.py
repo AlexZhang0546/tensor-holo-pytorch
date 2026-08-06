@@ -98,6 +98,16 @@ def build_original_parser():
                         help="Number layers")
     parser.add_argument("--model-name", default="full_loss", type=str,
                         help="Model name")
+    parser.add_argument("--model-arch", default="holonet",
+                        choices=["holonet", "unet"],
+                        help="Main network architecture "
+                             "(holonet: original, unet: multi-scale ComplexUNet)")
+    parser.add_argument("--unet-depth", default=3, type=int,
+                        help="ComplexUNet downsample levels")
+    parser.add_argument("--unet-base-filters", default=24, type=int,
+                        help="ComplexUNet base filters (shallowest level)")
+    parser.add_argument("--unet-attention", action="store_true",
+                        help="Enable bottleneck self-attention in ComplexUNet")
 
     # ---- 训练参数 ----
     parser.add_argument("--num-epochs", default=4050, type=int,
@@ -222,6 +232,13 @@ def _build_stage1_argv(args):
         argv.append("--restore")
     if args.ckpt_dir:
         argv.append("--ckpt-dir=%s" % args.ckpt_dir)
+    argv.extend([
+        "--model-arch=%s" % args.model_arch,
+        "--unet-depth=%d" % args.unet_depth,
+        "--unet-base-filters=%d" % args.unet_base_filters,
+    ])
+    if args.unet_attention:
+        argv.append("--unet-attention")
     return argv
 
 
@@ -253,6 +270,13 @@ def _build_stage2_argv(args, cur_dir):
         argv.append("--restore-stage2")
     if args.stage2_ckpt_dir:
         argv.append("--stage2-ckpt-dir=%s" % args.stage2_ckpt_dir)
+    argv.extend([
+        "--model-arch=%s" % args.model_arch,
+        "--unet-depth=%d" % args.unet_depth,
+        "--unet-base-filters=%d" % args.unet_base_filters,
+    ])
+    if args.unet_attention:
+        argv.append("--unet-attention")
     return argv
 
 
@@ -280,6 +304,13 @@ def _build_validate_argv(args, val_mode, cur_dir):
         argv.append("--bypass-ddpm-network")
     if args.ddpm_ckpt_path:
         argv.append("--ddpm-ckpt-path=%s" % args.ddpm_ckpt_path)
+    argv.extend([
+        "--model-arch=%s" % args.model_arch,
+        "--unet-depth=%d" % args.unet_depth,
+        "--unet-base-filters=%d" % args.unet_base_filters,
+    ])
+    if args.unet_attention:
+        argv.append("--unet-attention")
     return argv
 
 
@@ -308,6 +339,10 @@ def _build_eval_namespace(args, cur_dir):
         phs_max=args.phs_max,
         k=args.k,
         pitch=args.pitch,
+        model_arch=args.model_arch,
+        unet_depth=args.unet_depth,
+        unet_base_filters=args.unet_base_filters,
+        unet_attention=args.unet_attention,
     )
 
 
@@ -331,6 +366,13 @@ def _build_export_argv(args, cur_dir):
         argv.append("--activate-ddpm")
     if args.ddpm_ckpt_path:
         argv.append("--ddpm-ckpt-path=%s" % args.ddpm_ckpt_path)
+    argv.extend([
+        "--model-arch=%s" % args.model_arch,
+        "--unet-depth=%d" % args.unet_depth,
+        "--unet-base-filters=%d" % args.unet_base_filters,
+    ])
+    if args.unet_attention:
+        argv.append("--unet-attention")
     return argv
 
 
