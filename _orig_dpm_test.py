@@ -50,25 +50,21 @@ ssim_amp = tf.reduce_mean(tf.image.ssim(
     tf.transpose(amp_gt_t, [0, 2, 3, 1]), 1.0))
 
 # focal-plane image comparison
-imgs_gt = {}
-imgs_out = {}
+ssim_focal = {}
 for focus in [-3.0, 0.0, 3.0]:
-    imgs_gt[focus] = tf.abs(propagator(holo_gt_t, -focus))
-    imgs_out[focus] = tf.abs(propagator(holo_out, -focus))
+    img_gt = tf.abs(propagator(holo_gt_t, -focus))
+    img_out = tf.abs(propagator(holo_out, -focus))
+    ssim_focal[focus] = tf.reduce_mean(tf.image.ssim(
+        tf.transpose(img_gt, [0, 2, 3, 1]),
+        tf.transpose(img_out, [0, 2, 3, 1]), 1.0))
 
 with tf.Session() as sess:
     amp_max_val = sess.run(amp_max)
     print("orig amp_max:", np.round(np.asarray(amp_max_val).flatten(), 4).tolist())
     s = sess.run(ssim_amp)
     print("orig SSIM(amp_out, amp_gt) = %.4f" % s)
-    for focus in imgs_gt:
-        g, o = sess.run([imgs_gt[focus], imgs_out[focus]])
-        ssim_f = np.mean([
-            tf.image.ssim(tf.convert_to_tensor(g[i][None].transpose(1, 2, 0)[None]),
-                          tf.convert_to_tensor(o[i][None].transpose(1, 2, 0)[None]),
-                          1.0).eval(session=sess)
-            for i in range(1)])
-        print("orig focal focus %+4.1fmm SSIM = %.4f" % (focus, ssim_f))
+    for focus, op in ssim_focal.items():
+        print("orig focal focus %+4.1fmm SSIM = %.4f" % (focus, sess.run(op)))
 
     # 输出 phs_only 范围
     po = sess.run(phs_only)
