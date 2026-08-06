@@ -45,12 +45,12 @@ def main():
     flat = np.argsort(d.ravel())[-8:][::-1]
     print("top diff pixels (b,c,h,w): diff | torch(real,imag,amp) | onnx(real,imag,amp)")
     for idx in flat:
-        b, c, h, w = np.unravel_index(idx, d.shape)
-        tr, ti = t_r[b, c, h, w], t_i[b, c, h, w]
-        orr, oi = o_r[b, c, h, w], o_i[b, c, h, w]
-        hr, hi = holo[b, c, h, w].real.item(), holo[b, c, h, w].imag.item()
+        b, c, h, w = (int(v) for v in np.unravel_index(int(idx), d.shape))
+        tr, ti = float(t_r[b, c, h, w]), float(t_i[b, c, h, w])
+        orr, oi = float(o_r[b, c, h, w]), float(o_i[b, c, h, w])
+        hr, hi = float(holo[b, c, h, w].real), float(holo[b, c, h, w].imag)
         print("  %s: diff=%.4f torch=(%.4f,%.4f,amp=%.4f) onnx=(%.4f,%.4f,amp=%.4f) holo=(%.4f,%.4f,amp=%.4f)"
-              % ((b, c, h, w), d[idx], tr, ti, np.hypot(tr, ti), orr, oi,
+              % ((b, c, h, w), float(d[b, c, h, w]), tr, ti, np.hypot(tr, ti), orr, oi,
                  np.hypot(orr, oi), hr, hi, np.hypot(hr, hi)))
 
     amp_t, amp_o = np.hypot(t_r, t_i), np.hypot(o_r, o_i)
