@@ -282,7 +282,7 @@ def train_stage2(
     bypass_ddpm=False
 ):
     # ---------- 构建模型（复数版本） ----------
-    holonet = ComplexHoloNet(**model_params).to(device)
+    holonet = build_main_net(**model_params).to(device)
     ddpm_net = ComplexDDPMNet(**ddpm_params).to(device) if not bypass_ddpm else None
 
     # ---------- 加载 stage1 权重 ----------
