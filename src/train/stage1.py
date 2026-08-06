@@ -20,7 +20,7 @@ from torch.utils.tensorboard import SummaryWriter  # 可选
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.models.holonet import ComplexHoloNet             # 复数主网络
+from src.models.factory import build_main_net             # 主网络工厂
 from src.data.dataset import THDataset, create_dataloader
 from src.optics.propagation import propagator_factory
 from src.losses.complex_losses import complex_holo_loss   # 复数全息损失
@@ -43,21 +43,21 @@ def parse_args():
     parser.add_argument('--ckpt-dir', default=None, type=str, help='Checkpoint directory')
     parser.add_argument('--active-max-ldi-layer', type=int, default=0,
                         help='Maximum LDI layer index (0 for single RGBD)')
+    parser.add_argument('--model-arch', default='holonet',
+                        choices=['holonet', 'unet'],
+                        help='Main network architecture')
+    parser.add_argument('--unet-depth', type=int, default=3,
+                        help='ComplexUNet downsample levels')
+    parser.add_argument('--unet-base-filters', type=int, default=24,
+                        help='ComplexUNet base filters (shallowest level)')
+    parser.add_argument('--unet-attention', action='store_true',
+                        help='Enable bottleneck self-attention in ComplexUNet')
     return parser.parse_args()
 
 
 def build_model(model_params):
     """根据参数字典构建复数主网络"""
-    model = ComplexHoloNet(
-        input_dim=model_params['input_dim'],
-        num_layers=model_params['num_layers'],
-        num_filters_per_layer=model_params['num_filters_per_layer'],
-        interleave_rate=model_params.get('interleave_rate', 1),
-        filter_width=model_params.get('filter_width', 3),
-        bias_stddev=model_params.get('bias_stddev', 0.01),
-        weight_var_scale=model_params.get('weight_var_scale', 0.25)
-    )
-    return model
+    return build_main_net(**model_params)
 
 
 def build_propagator(hologram_params):
@@ -346,6 +346,10 @@ def main():
         "input_dim": 4 * (active_layer + 1),    # 复数网络不需要 output_dim
         "num_layers": args.num_layers,
         "num_filters_per_layer": args.num_filters_per_layer,
+        "arch": args.model_arch,
+        "unet_depth": args.unet_depth,
+        "unet_base_filters": args.unet_base_filters,
+        "unet_attention": args.unet_attention,
         "interleave_rate": 1,
         "filter_width": 3,
         "bias_stddev": 0.01,
