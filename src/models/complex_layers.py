@@ -3,9 +3,7 @@
 复值神经网络基础模块：
   - ComplexConv2d: 复数二维卷积（两个实卷积）
   - ComplexBatchNorm2d: 完整复数批归一化（白化+去相关，已修复广播错误）
-  - SimpleComplexBatchNorm2d: 简化版复数批归一化（分别对实/虚部 BN，仅供对照）
   - ComplexReLU: modReLU 激活函数
-  - complex_xavier_uniform_: 复数 Xavier 初始化
 """
 
 import math
@@ -197,22 +195,6 @@ class ComplexBatchNorm2d(nn.Module):
         y_imag = y_imag.view(B, C, H, W)
         return torch.complex(y_real, y_imag)
 
-
-class SimpleComplexBatchNorm2d(nn.Module):
-    """
-    简化版复数批归一化（仅供对照实验，不推荐用于最终模型）。
-    分别对实部和虚部执行独立的 2D BatchNorm，忽略了二者的相关性。
-    """
-    def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True,
-                 track_running_stats=True):
-        super().__init__()
-        self.bn_real = nn.BatchNorm2d(num_features, eps, momentum, affine, track_running_stats)
-        self.bn_imag = nn.BatchNorm2d(num_features, eps, momentum, affine, track_running_stats)
-
-    def forward(self, x):
-        return torch.complex(self.bn_real(x.real), self.bn_imag(x.imag))
-
-
 class ComplexReLU(nn.Module):
     """
     modReLU 激活函数。
@@ -228,16 +210,3 @@ class ComplexReLU(nn.Module):
         bias = self.b.view(1, -1, 1, 1)
         mask = F.relu(abs_z + bias)
         return mask * (x / (abs_z + 1e-8))
-
-
-def complex_xavier_uniform_(weight_real, weight_imag, fan_in, fan_out):
-    """
-    复数 Xavier 初始化（in‑place）。
-    幅度: sqrt(2 / (fan_in + fan_out))
-    相位: 均匀分布 U[-π, π]
-    """
-    amplitude = math.sqrt(2.0 / (fan_in + fan_out))
-    with torch.no_grad():
-        phase = torch.empty_like(weight_real).uniform_(-math.pi, math.pi)
-        weight_real.copy_(amplitude * torch.cos(phase))
-        weight_imag.copy_(amplitude * torch.sin(phase))

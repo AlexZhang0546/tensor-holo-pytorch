@@ -1,12 +1,10 @@
 """
 复数域损失函数
 - complex_holo_loss : 直接比较复数预测与复数目标
-- complex_ddpm_phase_loss : 从复数场提取相位，计算相位分布正则项
 """
 
 import torch
 import torch.nn.functional as F
-import numpy as np
 
 
 def complex_holo_loss(
@@ -53,43 +51,3 @@ def complex_holo_loss(
 
     else:
         raise ValueError(f"Unsupported method: {method}. Use 'magnitude_phase' or 'complex_diff'.")
-
-
-def complex_ddpm_phase_loss(
-    complex_field: torch.Tensor,
-    pad: int = 0,
-    res_h: int = None,
-    res_w: int = None
-):
-    """
-    DDPM 相位正则损失（复数版本）。
-    直接从复数场提取相位，计算空间标准差和均值偏移量。
-
-    Args:
-        complex_field: DDPM 校正后的复数场 (B, 3, H_pad, W_pad)。
-        pad: 边缘填充量，裁剪后计算。
-        res_h, res_w: 原始（无填充）的高度和宽度。
-
-    Returns:
-        std_loss:  各通道空间标准差的均值。
-        mean_loss: 各通道空间均值偏离 0.5 的绝对值的平均（归一化到 [0,1] 的相位）。
-    """
-    # 从复数场提取相位，并归一化到 [0, 1]
-    phs = torch.angle(complex_field) / (2.0 * np.pi) + 0.5  # (B, C, H, W)
-
-    if pad > 0:
-        if res_h is None:
-            res_h = phs.shape[2] - 2 * pad
-        if res_w is None:
-            res_w = phs.shape[3] - 2 * pad
-        phs = phs[:, :, pad:pad + res_h, pad:pad + res_w]
-
-    # 空间维度的标准差
-    std_per_channel = phs.std(dim=(2, 3))   # (B, C)
-    std_loss = std_per_channel.mean()
-
-    # 空间均值偏离 0.5 的程度
-    mean_per_channel = phs.mean(dim=(2, 3))
-    mean_loss = (mean_per_channel - 0.5).abs().mean()
-
-    return std_loss, mean_loss

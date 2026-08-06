@@ -11,20 +11,6 @@ import math
 from typing import Optional
 
 
-def _gaussian_kernel(kernel_size: int, sigma: float, channels: int) -> torch.Tensor:
-    """生成二维高斯核，用于 SSIM 的局部窗口。"""
-    # 生成一维坐标
-    coords = torch.arange(kernel_size, dtype=torch.float32)
-    coords -= (kernel_size - 1) / 2.0
-    gauss = torch.exp(-(coords ** 2) / (2.0 * sigma ** 2))
-    gauss = gauss / gauss.sum()
-    # 外积得到二维核
-    kernel_2d = gauss[:, None] * gauss[None, :]  # (ks, ks)
-    # 扩展到所有通道
-    kernel = kernel_2d.expand(channels, 1, kernel_size, kernel_size)  # (C, 1, ks, ks)
-    return kernel
-
-
 def compute_ssim(
     img1: torch.Tensor,
     img2: torch.Tensor,
