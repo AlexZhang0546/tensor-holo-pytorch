@@ -2,6 +2,7 @@
 """
 复值神经网络基础模块：
   - ComplexConv2d: 复数二维卷积（两个实卷积）
+  - ComplexConvTranspose2d: 复数转置卷积（两个实转置卷积）
   - ComplexBatchNorm2d: 完整复数批归一化（白化+去相关，已修复广播错误）
   - ComplexReLU: modReLU 激活函数
 """
@@ -36,6 +37,46 @@ class ComplexConv2d(nn.Module):
         fan_in = self.conv_real.in_channels * self.conv_real.kernel_size[0] * self.conv_real.kernel_size[1]
         fan_out = self.conv_real.out_channels * self.conv_real.kernel_size[0] * self.conv_real.kernel_size[1]
         # 使用原 TF 中的均匀分布初始化，方差缩放系数 r=0.25
+        r = 0.25
+        high = (r * 2.0 / (fan_in + fan_out)) ** 0.5
+        with torch.no_grad():
+            self.conv_real.weight.uniform_(-high, high)
+            self.conv_imag.weight.uniform_(-high, high)
+            if self.conv_real.bias is not None:
+                self.conv_real.bias.normal_(std=0.01)
+            if self.conv_imag.bias is not None:
+                self.conv_imag.bias.normal_(std=0.01)
+
+    def forward(self, x):
+        if torch.is_complex(x):
+            x_real, x_imag = x.real, x.imag
+        else:
+            x_real, x_imag = x, torch.zeros_like(x)
+
+        out_real = self.conv_real(x_real) - self.conv_imag(x_imag)
+        out_imag = self.conv_real(x_imag) + self.conv_imag(x_real)
+        return torch.complex(out_real, out_imag)
+
+
+class ComplexConvTranspose2d(nn.Module):
+    """
+    复数转置卷积（用于上采样）。
+    内部使用两个实值 nn.ConvTranspose2d，按复数乘法规则组合输出。
+    """
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
+                 padding=0, output_padding=0, dilation=1, groups=1, bias=True):
+        super().__init__()
+        self.conv_real = nn.ConvTranspose2d(
+            in_channels, out_channels, kernel_size, stride, padding,
+            output_padding, groups, bias, dilation)
+        self.conv_imag = nn.ConvTranspose2d(
+            in_channels, out_channels, kernel_size, stride, padding,
+            output_padding, groups, bias, dilation)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        fan_in = self.conv_real.in_channels * self.conv_real.kernel_size[0] * self.conv_real.kernel_size[1]
+        fan_out = self.conv_real.out_channels * self.conv_real.kernel_size[0] * self.conv_real.kernel_size[1]
         r = 0.25
         high = (r * 2.0 / (fan_in + fan_out)) ** 0.5
         with torch.no_grad():
