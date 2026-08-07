@@ -156,13 +156,14 @@ python main.py --train-mode --train-stage stage2 \
   --stage1-ckpt model/ckpt_full_loss_pitch_8_layers_30_filters_24_stage1/stage1_latest.pth \
   --stage2-ckpt-dir model/stage2_v2 \
   --stage2-epochs 50 --joint-epochs 200 \
-  --depth-shift 12.0 --num-iter-per-test 200
+  --train-depth-shift 12.0 --num-iter-per-test 200
 ```
 
 流程：先运行 `--stage2-epochs` 个 **identity 预训练** epoch（主网络冻结，仅训练 DDPM，
 使输出场≈输入场），再运行 `--joint-epochs` 个 **联合训练** epoch（主网络 + DDPM 同时训练）。
 
-- `--train-depth-shift` 是 `--depth-shift` 的别名（深度偏移，mm）。
+- 顶层参数为 `--train-depth-shift`（深度偏移，mm；stage2 模块内部同时接受
+  `--depth-shift` 别名）。
 - `--activate-ddpm`：启用 DDPM 网络；`--bypass-ddpm-network`：旁路 DDPM（仅训练主网络，
   通常用于 0 mm 偏移）。
 - 默认 checkpoint 目录：
@@ -175,7 +176,7 @@ Stage 2 续训（优先从 joint checkpoint 恢复、自动跳过 identity）：
 python main.py --train-mode --train-stage stage2 \
   --dataset-res 384 --activate-ddpm \
   --restore-stage2 --stage2-ckpt-dir model/stage2_v2 \
-  --joint-epochs 400 --depth-shift 12.0
+  --joint-epochs 400 --train-depth-shift 12.0
 ```
 
 `--restore-stage2` 优先加载 `stage2_joint_latest.pth`（含主网络 + DDPM + 优化器），从
@@ -186,7 +187,7 @@ python main.py --train-mode --train-stage stage2 \
 ```bash
 python main.py --validate-mode-s1 --ckpt-path model/.../stage1_latest.pth
 python main.py --validate-mode-s2 --activate-ddpm \
-  --ckpt-path model/.../stage2_joint_latest.pth --depth-shift 12.0
+  --ckpt-path model/.../stage2_joint_latest.pth --train-depth-shift 12.0
 ```
 
 - Stage 1 验证：主网络输出复数场，比较预测振幅与目标振幅的 SSIM / PSNR。
@@ -202,7 +203,7 @@ python main.py --eval-mode --activate-ddpm \
   --eval-depth-path data/example_input/couch_depth.png \
   --eval-output-path output/ \
   --eval-res-h 1080 --eval-res-w 1920 \
-  --depth-shift 12.0 --eval-depth-shift 0.0
+  --train-depth-shift 12.0 --eval-depth-shift 0.0
 ```
 
 - 输出：相位图、振幅图及各通道相位图等。
@@ -257,7 +258,7 @@ python test_onnx.py --ckpt model/.../stage2_joint_latest.pth --activate-ddpm --r
 | `--learning-rate` | 1e-4 | 学习率 |
 | `--num-iter-per-test` | 1000 | 训练中验证间隔（step） |
 | `--active-max-ldi-layer` | 0 | 最大 LDI 层索引（0 = 单层 RGBD） |
-| `--depth-shift` / `--train-depth-shift` | 12.0 | Stage 2 深度偏移（mm） |
+| `--train-depth-shift` | 12.0 | Stage 2 深度偏移（mm）（模块内别名 `--depth-shift`） |
 | `--padding` | 0 | 全息图边缘填充（容纳出画幅衍射） |
 | `--activate-ddpm` | False | 启用 DDPM 网络 |
 | `--bypass-ddpm-network` | False | 旁路 DDPM 网络 |
