@@ -284,8 +284,8 @@ def _run_stage2_forward(
         'ssim_img': ssim_img,
         'psnr_img': psnr_img,
         'mean_loss': mean_loss,
-        'std_loss': std_loss
-        , 'holo_anchor': holo_anchor
+        'std_loss': std_loss,
+        'holo_anchor': holo_anchor,
     }
 
 
