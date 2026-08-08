@@ -116,6 +116,9 @@ def build_original_parser():
                         help="DDPM phase std regularizer weight (stage2)")
     parser.add_argument("--weight-mean", default=0.03, type=float,
                         help="DDPM phase mean regularizer weight (stage2)")
+    parser.add_argument("--weight-holo-joint", default=0.0, type=float,
+                        help="HoloNet-to-GT fidelity anchor weight in joint loss "
+                             "(0 = original behavior)")
 
     # ---- 训练参数 ----
     parser.add_argument("--num-epochs", default=4050, type=int,
@@ -258,6 +261,7 @@ def _build_stage2_argv(args, cur_dir):
         "--weight-fs-tv=%s" % args.weight_fs_tv,
         "--weight-std=%s" % args.weight_std,
         "--weight-mean=%s" % args.weight_mean,
+        "--weight-holo-joint=%s" % args.weight_holo_joint,
         "--dataset-res=%d" % args.dataset_res,
         "--pitch=%s" % args.pitch,
         "--num-layers=%d" % args.num_layers,
