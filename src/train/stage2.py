@@ -79,6 +79,15 @@ def parse_args():
                         help='ComplexUNet base filters (shallowest level)')
     parser.add_argument('--unet-attention', action='store_true',
                         help='Enable bottleneck self-attention in ComplexUNet')
+    parser.add_argument('--weight-fs', type=float, default=20.0,
+                        help='Focal stack loss weight (reference default: '
+                             'num_top_depth + num_random_depth = 20)')
+    parser.add_argument('--weight-fs-tv', type=float, default=20.0,
+                        help='Focal stack TV loss weight (reference default: 20)')
+    parser.add_argument('--weight-std', type=float, default=0.02,
+                        help='DDPM phase std regularizer weight')
+    parser.add_argument('--weight-mean', type=float, default=0.03,
+                        help='DDPM phase mean regularizer weight')
     # 别名：与原始 main_v2.py 的参数名保持一致
     parser.add_argument('--train-depth-shift', dest='depth_shift',
                         default=12.0, type=float, help=argparse.SUPPRESS)
@@ -590,10 +599,10 @@ def main():
     loss_params = {
         "loss_type": "l1",
         "weight_holo": 1.0,
-        "weight_fs": float(training_params["num_top_depth_for_img_loss"] + training_params["num_random_depth_for_img_loss"]),
-        "weight_fs_tv": float(training_params["num_top_depth_for_img_loss"] + training_params["num_random_depth_for_img_loss"]),
-        "weight_std": 0.02,
-        "weight_mean": 0.03,
+        "weight_fs": args.weight_fs,
+        "weight_fs_tv": args.weight_fs_tv,
+        "weight_std": args.weight_std,
+        "weight_mean": args.weight_mean,
         "phs_max": [2 * np.pi, 2 * np.pi, 2 * np.pi]   # 关键：相位最大值
     }
 
