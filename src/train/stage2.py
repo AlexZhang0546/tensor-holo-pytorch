@@ -28,6 +28,7 @@ from src.optics.complex_utils import compl_val, compl_exp
 from src.optics.dpm import aadpm
 from src.optics.aperture import filter_phs_only
 from src.losses.focal_stack import compute_focal_stack_loss
+from src.losses.complex_losses import complex_holo_loss
 from src.utils.metrics import compute_ssim, compute_psnr
 from src.losses.ddpm_loss import compute_ddpm_phase_loss
 
@@ -88,6 +89,10 @@ def parse_args():
                         help='DDPM phase std regularizer weight')
     parser.add_argument('--weight-mean', type=float, default=0.03,
                         help='DDPM phase mean regularizer weight')
+    parser.add_argument('--weight-holo-joint', type=float, default=0.0,
+                        help='HoloNet-to-GT fidelity anchor added to the joint '
+                             'loss (0 = original behavior; >0 prevents the main '
+                             'network from drifting during joint training)')
     # 别名：与原始 main_v2.py 的参数名保持一致
     parser.add_argument('--train-depth-shift', dest='depth_shift',
                         default=12.0, type=float, help=argparse.SUPPRESS)
@@ -255,6 +260,21 @@ def _run_stage2_forward(
         w_mean = loss_params.get('weight_mean', 0.03)
         total_loss = total_loss + w_std * std_loss + w_mean * mean_loss
 
+    # 10b. 主网络保真锚（可选，默认 0 保持原行为）：
+    #      防止联合训练中主网络与 DDPM 过度耦合漂移（主网络输出被拉离目标全息场）。
+    w_holo_joint = loss_params.get('weight_holo_joint', 0.0)
+    holo_anchor = torch.tensor(0.0, device=device)
+    if w_holo_joint > 0:
+        holo_mid_crop = holo_mid
+        if pad > 0:
+            holo_mid_crop = holo_mid[:, :, pad:pad + hologram_params['res_h'],
+                                     pad:pad + hologram_params['res_w']]
+        holo_anchor = complex_holo_loss(
+            holo_mid_crop, holo_gt,
+            loss_type=loss_params.get('loss_type', 'l1'),
+            method='magnitude_phase')
+        total_loss = total_loss + w_holo_joint * holo_anchor
+
     return {
         'loss': total_loss,
         'fs_loss': fs_loss,
@@ -265,6 +285,7 @@ def _run_stage2_forward(
         'psnr_img': psnr_img,
         'mean_loss': mean_loss,
         'std_loss': std_loss
+        , 'holo_anchor': holo_anchor
     }
 
 
