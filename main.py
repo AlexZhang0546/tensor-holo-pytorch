@@ -247,12 +247,6 @@ def _build_stage1_argv(args):
     ])
     if args.unet_attention:
         argv.append("--unet-attention")
-    argv.extend([
-        "--weight-fs=%s" % args.weight_fs,
-        "--weight-fs-tv=%s" % args.weight_fs_tv,
-        "--weight-std=%s" % args.weight_std,
-        "--weight-mean=%s" % args.weight_mean,
-    ])
     return argv
 
 
@@ -260,6 +254,10 @@ def _build_stage2_argv(args, cur_dir):
     stage1_ckpt = args.stage1_ckpt or _default_ckpt_stage1(cur_dir, args)
     argv = [
         "--model-name=%s" % args.model_name,
+        "--weight-fs=%s" % args.weight_fs,
+        "--weight-fs-tv=%s" % args.weight_fs_tv,
+        "--weight-std=%s" % args.weight_std,
+        "--weight-mean=%s" % args.weight_mean,
         "--dataset-res=%d" % args.dataset_res,
         "--pitch=%s" % args.pitch,
         "--num-layers=%d" % args.num_layers,
