@@ -108,6 +108,14 @@ def build_original_parser():
                         help="ComplexUNet base filters (shallowest level)")
     parser.add_argument("--unet-attention", action="store_true",
                         help="Enable bottleneck self-attention in ComplexUNet")
+    parser.add_argument("--weight-fs", default=20.0, type=float,
+                        help="Focal stack loss weight (stage2)")
+    parser.add_argument("--weight-fs-tv", default=20.0, type=float,
+                        help="Focal stack TV loss weight (stage2)")
+    parser.add_argument("--weight-std", default=0.02, type=float,
+                        help="DDPM phase std regularizer weight (stage2)")
+    parser.add_argument("--weight-mean", default=0.03, type=float,
+                        help="DDPM phase mean regularizer weight (stage2)")
 
     # ---- 训练参数 ----
     parser.add_argument("--num-epochs", default=4050, type=int,
@@ -239,6 +247,12 @@ def _build_stage1_argv(args):
     ])
     if args.unet_attention:
         argv.append("--unet-attention")
+    argv.extend([
+        "--weight-fs=%s" % args.weight_fs,
+        "--weight-fs-tv=%s" % args.weight_fs_tv,
+        "--weight-std=%s" % args.weight_std,
+        "--weight-mean=%s" % args.weight_mean,
+    ])
     return argv
 
 
