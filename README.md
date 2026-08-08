@@ -254,6 +254,10 @@ python test_onnx.py --ckpt model/.../stage2_joint_latest.pth --activate-ddpm --r
 | `--epoch_to_start_ddpm_training` | 3000 | 信息性参数（移植版中训练已拆分为两个脚本） |
 | `--stage2-epochs` | 50 | Stage 2 identity 预训练 epoch 数 |
 | `--joint-epochs` | 200 | Stage 2 联合训练 epoch 数 |
+| `--weight-fs` | 20 | Stage 2 焦栈损失权重（原版默认 15+5） |
+| `--weight-fs-tv` | 20 | Stage 2 焦栈 TV 损失权重 |
+| `--weight-std` / `--weight-mean` | 0.02 / 0.03 | Stage 2 相位统计正则权重 |
+| `--weight-holo-joint` | 0.0 | Stage 2 joint 的主网络保真锚权重（0 = 原行为；>0 防止主网络在联合训练中漂移） |
 | `--batch` | 2 | 批大小 |
 | `--learning-rate` | 1e-4 | 学习率 |
 | `--num-iter-per-test` | 1000 | 训练中验证间隔（step） |
