@@ -354,6 +354,9 @@ def train_stage2(
             start_epoch_joint = ckpt['epoch'] + 1
             global_step = ckpt.get('global_step', 0)
             start_epoch_identity = identity_epochs  # 跳过 identity 阶段
+            # 恢复后应用当前命令行的学习率（覆盖 checkpoint 中保存的旧 lr）
+            for pg in optimizer_joint.param_groups:
+                pg['lr'] = training_params.get('learning_rate', 1e-4)
         elif os.path.exists(identity_ckpt) and ddpm_net is not None:
             print(f"Resuming identity pretraining from {identity_ckpt}")
             ckpt = load_checkpoint(identity_ckpt)
