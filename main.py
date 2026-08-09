@@ -265,6 +265,7 @@ def _build_stage2_argv(args, cur_dir):
         "--weight-std=%s" % args.weight_std,
         "--weight-mean=%s" % args.weight_mean,
         "--weight-holo-joint=%s" % args.weight_holo_joint,
+        "--weight-ssim=%s" % args.weight_ssim,
         "--dataset-res=%d" % args.dataset_res,
         "--pitch=%s" % args.pitch,
         "--num-layers=%d" % args.num_layers,
