@@ -325,8 +325,6 @@ def _build_validate_argv(args, val_mode, cur_dir):
         argv.append("--ddpm-ckpt-path=%s" % args.ddpm_ckpt_path)
     if args.aperture_radius is not None:
         argv.append("--aperture-radius=%d" % args.aperture_radius)
-    else:
-        argv.append("--aperture-radius=")
     argv.extend([
         "--model-arch=%s" % args.model_arch,
         "--unet-depth=%d" % args.unet_depth,
