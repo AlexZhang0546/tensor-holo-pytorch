@@ -119,6 +119,9 @@ def build_original_parser():
     parser.add_argument("--weight-holo-joint", default=0.0, type=float,
                         help="HoloNet-to-GT fidelity anchor weight in joint loss "
                              "(0 = original behavior)")
+    parser.add_argument("--weight-ssim", default=0.0, type=float,
+                        help="Weight of (1 - SSIM_img) in the joint loss "
+                             "(0 = original behavior)")
     parser.add_argument("--aperture-radius", default=None, type=int,
                         help="Frequency-domain aperture radius (pixels); "
                              "None = min(res_h,res_w)//2")
