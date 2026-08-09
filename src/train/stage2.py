@@ -93,6 +93,9 @@ def parse_args():
                         help='HoloNet-to-GT fidelity anchor added to the joint '
                              'loss (0 = original behavior; >0 prevents the main '
                              'network from drifting during joint training)')
+    parser.add_argument('--weight-ssim', type=float, default=0.0,
+                        help='Weight of (1 - SSIM_img) added to the joint loss '
+                             '(0 = original behavior; >0 directly optimizes SSIM)')
     # 别名：与原始 main_v2.py 的参数名保持一致
     parser.add_argument('--train-depth-shift', dest='depth_shift',
                         default=12.0, type=float, help=argparse.SUPPRESS)
@@ -274,6 +277,12 @@ def _run_stage2_forward(
             loss_type=loss_params.get('loss_type', 'l1'),
             method='magnitude_phase')
         total_loss = total_loss + w_holo_joint * holo_anchor
+
+    # 10c. SSIM 项（可选，默认 0 保持原行为）：直接优化焦栈图像 SSIM，
+    #      在 L1 焦栈损失饱和后提供额外的结构化梯度。
+    w_ssim = loss_params.get('weight_ssim', 0.0)
+    if w_ssim > 0:
+        total_loss = total_loss + w_ssim * (1.0 - ssim_img)
 
     return {
         'loss': total_loss,
