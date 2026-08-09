@@ -11,7 +11,7 @@ def complex_holo_loss(
     pred_complex: torch.Tensor,
     target_complex: torch.Tensor,
     loss_type: str = 'l1',
-    method: str = 'magnitude_phase'   # 'magnitude_phase' or 'complex_diff'
+    method: str = 'magnitude_phase'   # 'magnitude_phase' / 'complex_diff' / 'phase_aligned'
 ) -> torch.Tensor:
     """
     复数全息图损失，替代原 compute_holo_loss。
@@ -23,6 +23,9 @@ def complex_holo_loss(
         method:
             - 'magnitude_phase': 分别计算实部和虚部的损失，等价于振幅-相位损失。
             - 'complex_diff': 基于复数乘积的全局相位不变损失（与原 cos/sin 分量等价）。
+            - 'phase_aligned': 与原版 main_v2.py 一致——先逐像素相位差，减去每通道
+              全局相位（空间均值），再比较 amp_gt*cos(phs_diff) vs |pred| 和
+              amp_gt*sin(phs_diff) vs 0。
 
     Returns:
         loss: 标量损失值。
@@ -49,5 +52,20 @@ def complex_holo_loss(
         loss_sin = loss_fn(diff.imag, torch.zeros_like(diff.imag))  # 相位差应为0
         return loss_cos + loss_sin
 
+    elif method == 'phase_aligned':
+        # 与原版 main_v2.py 的 holo_loss 一致（对每通道全局相位不变）：
+        #   1) 逐像素相位差：diff = target * conj(pred)，phs_diff = angle(diff)
+        #   2) 减去每通道全局相位（空间均值）
+        #   3) loss = L1(amp_gt*cos(phs_diff), |pred|) + L1(amp_gt*sin(phs_diff), 0)
+        diff = target_complex * torch.conj(pred_complex)
+        phs_diff = torch.angle(diff)
+        phs_diff = phs_diff - phs_diff.mean(dim=(2, 3), keepdim=True)
+        amp_gt = torch.abs(target_complex)
+        amp_pred = torch.abs(pred_complex)
+        loss_cos = loss_fn(amp_gt * torch.cos(phs_diff), amp_pred)
+        loss_sin = loss_fn(amp_gt * torch.sin(phs_diff), torch.zeros_like(phs_diff))
+        return loss_cos + loss_sin
+
     else:
-        raise ValueError(f"Unsupported method: {method}. Use 'magnitude_phase' or 'complex_diff'.")
+        raise ValueError(f"Unsupported method: {method}. "
+                         "Use 'magnitude_phase', 'complex_diff' or 'phase_aligned'.")
