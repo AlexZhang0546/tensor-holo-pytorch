@@ -279,7 +279,7 @@ def _run_stage2_forward(
         holo_anchor = complex_holo_loss(
             holo_mid_crop, holo_gt,
             loss_type=loss_params.get('loss_type', 'l1'),
-            method='magnitude_phase')
+            method='phase_aligned')
         total_loss = total_loss + w_holo_joint * holo_anchor
 
     # 10c. SSIM 项（可选，默认 0 保持原行为）：直接优化焦栈图像 SSIM，
