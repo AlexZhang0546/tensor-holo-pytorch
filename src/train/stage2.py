@@ -227,7 +227,7 @@ def _run_stage2_forward(
         num_channels=3,
         res_h=holo_altered.shape[2],
         res_w=holo_altered.shape[3],
-        radius=None,
+        radius=training_params.get('aperture_radius', None),
         phs_max=None,#phs_max,
         amp_max=amp_max,
         wavelength=hologram_params['wavelengths']

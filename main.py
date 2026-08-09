@@ -119,6 +119,9 @@ def build_original_parser():
     parser.add_argument("--weight-holo-joint", default=0.0, type=float,
                         help="HoloNet-to-GT fidelity anchor weight in joint loss "
                              "(0 = original behavior)")
+    parser.add_argument("--aperture-radius", default=None, type=int,
+                        help="Frequency-domain aperture radius (pixels); "
+                             "None = min(res_h,res_w)//2")
 
     # ---- 训练参数 ----
     parser.add_argument("--num-epochs", default=4050, type=int,
@@ -320,6 +323,10 @@ def _build_validate_argv(args, val_mode, cur_dir):
         argv.append("--bypass-ddpm-network")
     if args.ddpm_ckpt_path:
         argv.append("--ddpm-ckpt-path=%s" % args.ddpm_ckpt_path)
+    if args.aperture_radius is not None:
+        argv.append("--aperture-radius=%d" % args.aperture_radius)
+    else:
+        argv.append("--aperture-radius=")
     argv.extend([
         "--model-arch=%s" % args.model_arch,
         "--unet-depth=%d" % args.unet_depth,
