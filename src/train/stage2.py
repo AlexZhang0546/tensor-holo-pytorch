@@ -96,6 +96,10 @@ def parse_args():
     parser.add_argument('--weight-ssim', type=float, default=0.0,
                         help='Weight of (1 - SSIM_img) added to the joint loss '
                              '(0 = original behavior; >0 directly optimizes SSIM)')
+    parser.add_argument('--aperture-radius', type=int, default=None,
+                        help='Frequency-domain aperture radius (pixels). '
+                             'None = min(res_h, res_w)//2 (original behavior); '
+                             'for 384 the empirically better value is ~128')
     # 别名：与原始 main_v2.py 的参数名保持一致
     parser.add_argument('--train-depth-shift', dest='depth_shift',
                         default=12.0, type=float, help=argparse.SUPPRESS)
@@ -599,6 +603,7 @@ def main():
         "num_hist_bins": 200,
         "depth_shift": args.depth_shift,
         "padding": args.padding,
+        "aperture_radius": args.aperture_radius,
     }
 
     # 复数主网络参数
