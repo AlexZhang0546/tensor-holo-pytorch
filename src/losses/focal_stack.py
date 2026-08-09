@@ -219,8 +219,8 @@ def compute_focal_stack_loss(
             # SSIM 和 PSNR（在未加权图像上，使用 data_range=1.0 与原 TF 保持一致）
             # 注意：原代码 amp 范围为 [0, √2]，但 SSIM 仍用 max_val=1.0，
             # 这里为忠实迁移保留该行为。
-            ssim_sum += compute_ssim(img_gt_cropped, img_out_cropped)
-            psnr_sum += compute_psnr(img_gt_cropped, img_out_cropped)
+            ssim_sum += compute_ssim(img_gt_cropped, img_out_cropped, data_range=1.0)
+            psnr_sum += compute_psnr(img_gt_cropped, img_out_cropped, data_range=1.0)
 
     # 4. 归一化（除以总焦点数）
     normalize_scale = float(B * N_focus)
