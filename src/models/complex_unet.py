@@ -96,12 +96,14 @@ class ComplexUNet(nn.Module):
                  filter_width: int = 3,
                  bias_stddev: float = 0.01,
                  weight_var_scale: float = 0.25,
-                 use_attention: bool = False):
+                 use_attention: bool = False,
+                 out_bn: bool = False):
         super().__init__()
         self.input_dim = input_dim
         self.depth = depth
         self.base_filters = base_filters
         self.use_attention = use_attention
+        self.out_bn_enabled = out_bn
         pad = filter_width // 2
 
         # ---- 编码器 ----
@@ -146,6 +148,11 @@ class ComplexUNet(nn.Module):
         # ---- 输出头（线性，无激活） ----
         self.out_conv = ComplexConv2d(base_filters, output_dim, filter_width,
                                       padding=pad, bias=True)
+        if out_bn:
+            # 与 ComplexHoloNet 最后一层一致：conv + BN（无激活）
+            self.out_bn = ComplexBatchNorm2d(output_dim)
+        else:
+            self.out_bn = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # 1. 输入重归一化（与 ComplexHoloNet 一致）
@@ -183,6 +190,8 @@ class ComplexUNet(nn.Module):
 
         # 6. 输出头并裁剪回原始分辨率
         out = self.out_conv(h)
+        if self.out_bn is not None:
+            out = self.out_bn(out)
         if pad_h or pad_w:
             out = out[..., :orig_h, :orig_w]
         return out
