@@ -74,8 +74,8 @@ def validate_stage1(holonet, val_loader, hologram_params, device):
             amp_out = holo_out.abs()
 
             for i in range(amp_out.size(0)):
-                ssim_val = compute_ssim(amp_out[i], amp_gt[i])
-                psnr_val = compute_psnr(amp_out[i], amp_gt[i])
+                ssim_val = compute_ssim(amp_out[i], amp_gt[i], data_range=1.0)
+                psnr_val = compute_psnr(amp_out[i], amp_gt[i], data_range=1.0)
                 ssim_list.append(ssim_val.item())
                 psnr_list.append(psnr_val.item())
 
