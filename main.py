@@ -125,6 +125,8 @@ def build_original_parser():
     parser.add_argument("--freeze-bn", action="store_true",
                         help="Freeze BatchNorm running stats during stage1 "
                              "fine-tuning (model stays in eval mode)")
+    parser.add_argument("--weight-decay", default=0.0, type=float,
+                        help="L2 weight decay for the stage1 optimizer")
     parser.add_argument("--aperture-radius", default=None, type=int,
                         help="Frequency-domain aperture radius (pixels); "
                              "None = min(res_h,res_w)//2")
@@ -262,6 +264,7 @@ def _build_stage1_argv(args):
     argv.append("--weight-ssim=%s" % args.weight_ssim)
     if args.freeze_bn:
         argv.append("--freeze-bn")
+    argv.append("--weight-decay=%s" % args.weight_decay)
     return argv
 
 
