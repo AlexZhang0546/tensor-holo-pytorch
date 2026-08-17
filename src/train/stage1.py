@@ -56,6 +56,10 @@ def parse_args():
                         help='Weight of (1 - SSIM_img) added to the stage1 loss '
                              '(0 = original behavior; >0 directly optimizes the '
                              'paper metric)')
+    parser.add_argument('--freeze-bn', action='store_true',
+                        help='Freeze BatchNorm running stats during training '
+                             '(model stays in eval mode; use for fine-tuning '
+                             'from a trained checkpoint)')
     return parser.parse_args()
 
 
@@ -175,6 +179,9 @@ def train_stage1(
     # ---------- 构建模型、传播算子、优化器 ----------
     model = build_model(model_params).to(device)
     propagator = build_propagator(hologram_params).to(device)
+    if training_params.get('freeze_bn', False):
+        model.eval()   # BN 使用 running stats（冻结），只训练其余权重
+        print("BatchNorm running stats frozen (eval mode during training)")
 
     loss_type = loss_params.get('loss_type', 'l1')
     loss_fn = F.l1_loss if loss_type == 'l1' else F.mse_loss
