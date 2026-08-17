@@ -256,6 +256,7 @@ def _build_stage1_argv(args):
     ])
     if args.unet_attention:
         argv.append("--unet-attention")
+    argv.append("--weight-ssim=%s" % args.weight_ssim)
     return argv
 
 
