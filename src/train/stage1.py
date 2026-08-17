@@ -63,6 +63,10 @@ def parse_args():
     parser.add_argument('--weight-decay', type=float, default=0.0,
                         help='L2 weight decay for the optimizer '
                              '(regularizes the large UNet)')
+    parser.add_argument('--deterministic-depths', action='store_true',
+                        help='Use deterministic focal-stack depth sampling '
+                             '(no random jitter / random depths) to stabilize '
+                             'the SSIM objective')
     return parser.parse_args()
 
 
@@ -366,6 +370,7 @@ def main():
         "learning_rate": args.learning_rate,
         "freeze_bn": args.freeze_bn,
         "weight_decay": args.weight_decay,
+        "deterministic_depths": args.deterministic_depths,
         "decay_type": None,
         "decay_params": None,
         "num_iter_per_test": args.num_iter_per_test,

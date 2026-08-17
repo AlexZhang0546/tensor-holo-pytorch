@@ -100,6 +100,8 @@ def parse_args():
                         help='Frequency-domain aperture radius (pixels). '
                              'None = min(res_h, res_w)//2 (original behavior); '
                              'for 384 the empirically better value is ~128')
+    parser.add_argument('--deterministic-depths', action='store_true',
+                        help='Use deterministic focal-stack depth sampling')
     # 别名：与原始 main_v2.py 的参数名保持一致
     parser.add_argument('--train-depth-shift', dest='depth_shift',
                         default=12.0, type=float, help=argparse.SUPPRESS)
@@ -604,6 +606,7 @@ def main():
         "depth_shift": args.depth_shift,
         "padding": args.padding,
         "aperture_radius": args.aperture_radius,
+        "deterministic_depths": args.deterministic_depths,
     }
 
     # 复数主网络参数
