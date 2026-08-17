@@ -185,10 +185,6 @@ def train_stage1(
         betas=(0.9, 0.99),
         eps=1e-8
     )
-    # 恢复后应用当前命令行的学习率（覆盖 checkpoint 中保存的旧 lr）
-    if restore:
-        for pg in optimizer.param_groups:
-            pg['lr'] = training_params.get('learning_rate', 1e-4)
 
     scheduler = None
     if training_params.get('decay_type') == 'polynomial':
@@ -208,6 +204,9 @@ def train_stage1(
         start_epoch, global_step = load_checkpoint(model, optimizer, ckpt_path)
         start_epoch += 1
         print(f"Resumed from epoch {start_epoch}, global step {global_step}")
+        # 恢复后应用当前命令行的学习率（覆盖 checkpoint 中保存的旧 lr）
+        for pg in optimizer.param_groups:
+            pg['lr'] = training_params.get('learning_rate', 1e-4)
 
     # ---------- 训练循环 ----------
     model.train()
