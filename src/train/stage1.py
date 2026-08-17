@@ -360,6 +360,7 @@ def main():
         "batch": args.batch,
         "num_epochs": args.num_epochs,
         "learning_rate": args.learning_rate,
+        "freeze_bn": args.freeze_bn,
         "decay_type": None,
         "decay_params": None,
         "num_iter_per_test": args.num_iter_per_test,

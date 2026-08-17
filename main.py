@@ -122,6 +122,9 @@ def build_original_parser():
     parser.add_argument("--weight-ssim", default=0.0, type=float,
                         help="Weight of (1 - SSIM_img) in the joint loss "
                              "(0 = original behavior)")
+    parser.add_argument("--freeze-bn", action="store_true",
+                        help="Freeze BatchNorm running stats during stage1 "
+                             "fine-tuning (model stays in eval mode)")
     parser.add_argument("--aperture-radius", default=None, type=int,
                         help="Frequency-domain aperture radius (pixels); "
                              "None = min(res_h,res_w)//2")
@@ -257,6 +260,8 @@ def _build_stage1_argv(args):
     if args.unet_attention:
         argv.append("--unet-attention")
     argv.append("--weight-ssim=%s" % args.weight_ssim)
+    if args.freeze_bn:
+        argv.append("--freeze-bn")
     return argv
 
 
