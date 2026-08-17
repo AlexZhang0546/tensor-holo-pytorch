@@ -319,6 +319,8 @@ def _build_stage2_argv(args, cur_dir):
         argv.append("--unet-attention")
     if args.deterministic_depths:
         argv.append("--deterministic-depths")
+    if args.unet_out_bn:
+        argv.append("--unet-out-bn")
     return argv
 
 

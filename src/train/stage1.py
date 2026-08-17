@@ -87,6 +87,7 @@ def build_model(model_params):
         unet_depth=model_params.get("unet_depth", 3),
         unet_base_filters=model_params.get("unet_base_filters", 24),
         unet_attention=model_params.get("unet_attention", False),
+        unet_out_bn=model_params.get("unet_out_bn", False),
     )
 
 
@@ -393,6 +394,7 @@ def main():
         "unet_depth": args.unet_depth,
         "unet_base_filters": args.unet_base_filters,
         "unet_attention": args.unet_attention,
+        "unet_out_bn": args.unet_out_bn,
         "unet_out_bn": args.unet_out_bn,
         "interleave_rate": 1,
         "filter_width": 3,
