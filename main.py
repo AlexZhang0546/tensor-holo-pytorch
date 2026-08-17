@@ -321,6 +321,8 @@ def _build_stage2_argv(args, cur_dir):
         argv.append("--deterministic-depths")
     if args.unet_out_bn:
         argv.append("--unet-out-bn")
+    if args.aperture_radius is not None:
+        argv.append("--aperture-radius=%d" % args.aperture_radius)
     return argv
 
 
