@@ -60,6 +60,9 @@ def parse_args():
                         help='Freeze BatchNorm running stats during training '
                              '(model stays in eval mode; use for fine-tuning '
                              'from a trained checkpoint)')
+    parser.add_argument('--weight-decay', type=float, default=0.0,
+                        help='L2 weight decay for the optimizer '
+                             '(regularizes the large UNet)')
     return parser.parse_args()
 
 
@@ -190,7 +193,8 @@ def train_stage1(
         model.parameters(),
         lr=training_params.get('learning_rate', 1e-4),
         betas=(0.9, 0.99),
-        eps=1e-8
+        eps=1e-8,
+        weight_decay=training_params.get('weight_decay', 0.0),
     )
 
     scheduler = None
@@ -361,6 +365,7 @@ def main():
         "num_epochs": args.num_epochs,
         "learning_rate": args.learning_rate,
         "freeze_bn": args.freeze_bn,
+        "weight_decay": args.weight_decay,
         "decay_type": None,
         "decay_params": None,
         "num_iter_per_test": args.num_iter_per_test,
