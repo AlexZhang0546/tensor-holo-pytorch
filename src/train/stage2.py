@@ -102,6 +102,8 @@ def parse_args():
                              'for 384 the empirically better value is ~128')
     parser.add_argument('--deterministic-depths', action='store_true',
                         help='Use deterministic focal-stack depth sampling')
+    parser.add_argument('--unet-out-bn', action='store_true',
+                        help='Add BatchNorm to the UNet output layer')
     # 别名：与原始 main_v2.py 的参数名保持一致
     parser.add_argument('--train-depth-shift', dest='depth_shift',
                         default=12.0, type=float, help=argparse.SUPPRESS)
@@ -618,6 +620,7 @@ def main():
         "unet_depth": args.unet_depth,
         "unet_base_filters": args.unet_base_filters,
         "unet_attention": args.unet_attention,
+        "unet_out_bn": args.unet_out_bn,
         "interleave_rate": 1,
         "filter_width": 3,
         "bias_stddev": 0.01,

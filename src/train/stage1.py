@@ -67,6 +67,9 @@ def parse_args():
                         help='Use deterministic focal-stack depth sampling '
                              '(no random jitter / random depths) to stabilize '
                              'the SSIM objective')
+    parser.add_argument('--unet-out-bn', action='store_true',
+                        help='Add BatchNorm to the UNet output layer '
+                             '(mirrors ComplexHoloNet last layer)')
     return parser.parse_args()
 
 
@@ -390,6 +393,7 @@ def main():
         "unet_depth": args.unet_depth,
         "unet_base_filters": args.unet_base_filters,
         "unet_attention": args.unet_attention,
+        "unet_out_bn": args.unet_out_bn,
         "interleave_rate": 1,
         "filter_width": 3,
         "bias_stddev": 0.01,

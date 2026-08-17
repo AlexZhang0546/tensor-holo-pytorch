@@ -129,6 +129,8 @@ def build_original_parser():
                         help="L2 weight decay for the stage1 optimizer")
     parser.add_argument("--deterministic-depths", action="store_true",
                         help="Use deterministic focal-stack depth sampling")
+    parser.add_argument("--unet-out-bn", action="store_true",
+                        help="Add BatchNorm to the UNet output layer")
     parser.add_argument("--aperture-radius", default=None, type=int,
                         help="Frequency-domain aperture radius (pixels); "
                              "None = min(res_h,res_w)//2")
@@ -269,6 +271,8 @@ def _build_stage1_argv(args):
     argv.append("--weight-decay=%s" % args.weight_decay)
     if args.deterministic_depths:
         argv.append("--deterministic-depths")
+    if args.unet_out_bn:
+        argv.append("--unet-out-bn")
     return argv
 
 
