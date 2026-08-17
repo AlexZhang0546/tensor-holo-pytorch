@@ -106,7 +106,8 @@ def _sample_focus_depths(
     depth_maps: torch.Tensor,      # (B, 1, H, W)
     num_hist_bins: int = 200,
     num_top: int = 15,
-    num_random: int = 5
+    num_random: int = 5,
+    deterministic: bool = False
 ) -> torch.Tensor:
     """
     从一批深度图中采样焦点深度。
@@ -123,14 +124,20 @@ def _sample_focus_depths(
         # 按计数降序排序，返回索引（0 ~ bins-1）
         sorted_idx = torch.argsort(hist, descending=True).float()
         # 为每个 bin 添加随机偏移（0 ~ 1），再归一化
-        offset = torch.rand(1, device=device)
+        if deterministic:
+            offset = torch.full((1,), 0.5, device=device)   # 固定 bin 中值，去除随机抖动
+        else:
+            offset = torch.rand(1, device=device)
         idx = (sorted_idx + offset) / num_hist_bins
 
         top_depths = idx[:num_top]
         # 从剩余 bin 中随机选择 num_random 个
         rest = idx[num_top:]
-        perm = torch.randperm(rest.size(0), device=device)
-        random_depths = rest[perm[:num_random]]
+        if deterministic:
+            random_depths = rest[:num_random]               # 固定选取，去除随机性
+        else:
+            perm = torch.randperm(rest.size(0), device=device)
+            random_depths = rest[perm[:num_random]]
 
         sample = torch.cat([top_depths, random_depths], dim=0)  # (N_focus,)
         depth_to_focus_list.append(sample)
@@ -187,7 +194,9 @@ def compute_focal_stack_loss(
     B = holo_out.shape[0]
 
     # 1. 采样焦点深度（原始范围 [0, 1]）
-    depth_to_focus_norm = _sample_focus_depths(depth, num_hist_bins, num_top, num_random)
+    depth_to_focus_norm = _sample_focus_depths(
+        depth, num_hist_bins, num_top, num_random,
+        deterministic=training_params.get('deterministic_depths', False))
     N_focus = depth_to_focus_norm.shape[1]  # num_top + num_random
 
     # 2. 将深度值缩放到实际物理范围
