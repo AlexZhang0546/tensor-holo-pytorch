@@ -52,6 +52,10 @@ def parse_args():
                         help='ComplexUNet base filters (shallowest level)')
     parser.add_argument('--unet-attention', action='store_true',
                         help='Enable bottleneck self-attention in ComplexUNet')
+    parser.add_argument('--weight-ssim', type=float, default=0.0,
+                        help='Weight of (1 - SSIM_img) added to the stage1 loss '
+                             '(0 = original behavior; >0 directly optimizes the '
+                             'paper metric)')
     return parser.parse_args()
 
 
@@ -138,6 +142,9 @@ def combine_loss(
     weight_fs   = loss_params.get('weight_fs', 1.0)
     weight_fs_tv = loss_params.get('weight_fs_tv', 1.0)
     total_loss = weight_holo * holo_loss + weight_fs * fs_loss + weight_fs_tv * fs_tv_loss
+    weight_ssim = loss_params.get('weight_ssim', 0.0)
+    if weight_ssim > 0:
+        total_loss = total_loss + weight_ssim * (1.0 - ssim_img)
 
     return total_loss, holo_loss, fs_loss, fs_tv_loss, ssim_amp, psnr_amp, ssim_img, psnr_img
 
@@ -377,7 +384,8 @@ def main():
         "weight_fs_tv": float(training_params["num_top_depth_for_img_loss"] +
                               training_params["num_random_depth_for_img_loss"]),
         "weight_std": 0.02,
-        "weight_mean": 0.03
+        "weight_mean": 0.03,
+        "weight_ssim": args.weight_ssim,
     }
 
     dataset_params = {
