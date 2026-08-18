@@ -56,6 +56,10 @@ def parse_args():
                         help='Weight of (1 - SSIM_img) added to the stage1 loss '
                              '(0 = original behavior; >0 directly optimizes the '
                              'paper metric)')
+    parser.add_argument('--weight-holo', type=float, default=1.0,
+                        help='Weight of the phase-aligned complex-field fidelity '
+                             'loss in stage 1 (0 = drop it; helps if the GT '
+                             'phase is unreachable and conflicts with SSIM)')
     parser.add_argument('--freeze-bn', action='store_true',
                         help='Freeze BatchNorm running stats during training '
                              '(model stays in eval mode; use for fine-tuning '
@@ -433,7 +437,7 @@ def main():
 
     loss_params = {
         "loss_type": "l1",
-        "weight_holo": 1.0,
+        "weight_holo": args.weight_holo,
         "weight_fs": float(training_params["num_top_depth_for_img_loss"] +
                            training_params["num_random_depth_for_img_loss"]),
         "weight_fs_tv": float(training_params["num_top_depth_for_img_loss"] +
