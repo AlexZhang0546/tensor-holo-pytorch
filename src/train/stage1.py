@@ -127,8 +127,9 @@ def combine_loss(
     training_params,            # 训练参数
     loss_fn,                    # 像素损失函数 (l1_loss / mse_loss)
     loss_type,                  # 'l1' or 'l2'
-    loss_params,                # 损失权重等
-    pad=0
+    loss_params,
+    pad=0,
+    holo_method='phase_aligned'
 ):
     """
     将全息图损失与焦栈损失组合为总损失，并返回所有 metric。
