@@ -143,6 +143,9 @@ def build_original_parser():
     parser.add_argument("--unet-refine-blocks", default=0, type=int,
                         help="Full-res refine blocks before the UNet output "
                              "head (0 = disabled)")
+    parser.add_argument("--unet-tail-blocks", default=0, type=int,
+                        help="Full-res holonet-style tail layers after the "
+                             "UNet decoder (0 = disabled)")
     parser.add_argument("--unet-global-in", action="store_true",
                         help="Concat raw normalized input at the UNet output "
                              "head (holonet-style global skip)")
@@ -295,6 +298,7 @@ def _build_stage1_argv(args):
     if args.unet_global_in:
         argv.append("--unet-global-in")
     argv.append("--unet-refine-blocks=%d" % args.unet_refine_blocks)
+    argv.append("--unet-tail-blocks=%d" % args.unet_tail_blocks)
     return argv
 
 
@@ -348,6 +352,7 @@ def _build_stage2_argv(args, cur_dir):
     if args.unet_global_in:
         argv.append("--unet-global-in")
     argv.append("--unet-refine-blocks=%d" % args.unet_refine_blocks)
+    argv.append("--unet-tail-blocks=%d" % args.unet_tail_blocks)
     if args.aperture_radius is not None:
         argv.append("--aperture-radius=%d" % args.aperture_radius)
     return argv
@@ -391,6 +396,7 @@ def _build_validate_argv(args, val_mode, cur_dir):
     if args.unet_global_in:
         argv.append("--unet-global-in")
     argv.append("--unet-refine-blocks=%d" % args.unet_refine_blocks)
+    argv.append("--unet-tail-blocks=%d" % args.unet_tail_blocks)
     return argv
 
 

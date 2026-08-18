@@ -86,6 +86,9 @@ def parse_args():
     parser.add_argument('--unet-global-in', action='store_true',
                         help='Concat raw normalized input at the UNet output '
                              'head (holonet-style global skip)')
+    parser.add_argument('--unet-tail-blocks', type=int, default=0,
+                        help='Number of full-res holonet-style tail layers '
+                             'after the UNet decoder (0 = disabled)')
     return parser.parse_args()
 
 
@@ -107,6 +110,7 @@ def build_model(model_params):
         unet_stem_skip=model_params.get("unet_stem_skip", False),
         unet_refine_blocks=model_params.get("unet_refine_blocks", 0),
         unet_global_in=model_params.get("unet_global_in", False),
+        unet_tail_blocks=model_params.get("unet_tail_blocks", 0),
     )
 
 
@@ -434,6 +438,7 @@ def main():
         "unet_stem_skip": args.unet_stem_skip,
         "unet_refine_blocks": args.unet_refine_blocks,
         "unet_global_in": args.unet_global_in,
+        "unet_tail_blocks": args.unet_tail_blocks,
         "interleave_rate": 1,
         "filter_width": 3,
         "bias_stddev": 0.01,
