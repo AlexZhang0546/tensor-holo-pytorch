@@ -154,7 +154,7 @@ def combine_loss(
 
     # 2. 全息图复数损失
     holo_loss = complex_holo_loss(holo_out_crop, target_crop,
-                                  loss_type=loss_type, method='phase_aligned')
+                                  loss_type=loss_type, method=holo_method)
 
     # 3. 焦栈损失（内部会处理传播和裁剪，需传入未裁剪的复数场）
     fs_loss, fs_tv_loss, ssim_img, psnr_img = compute_focal_stack_loss(
@@ -438,6 +438,7 @@ def main():
     loss_params = {
         "loss_type": "l1",
         "weight_holo": args.weight_holo,
+        "holo_method": args.holo_method,
         "weight_fs": float(training_params["num_top_depth_for_img_loss"] +
                            training_params["num_random_depth_for_img_loss"]),
         "weight_fs_tv": float(training_params["num_top_depth_for_img_loss"] +
