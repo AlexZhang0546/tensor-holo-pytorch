@@ -278,7 +278,8 @@ def train_stage1(
             total_loss, holo_loss, fs_loss, fs_tv, ssim_amp, _, _, _ = combine_loss(
                 holo_out, target_complex, rgbd,
                 propagator, hologram_params, training_params,
-                loss_fn, loss_type, loss_params, pad=0
+                loss_fn, loss_type, loss_params, pad=0,
+                holo_method=loss_params.get('holo_method', 'phase_aligned')
             )
 
             optimizer.zero_grad()
@@ -321,7 +322,8 @@ def train_stage1(
                         _, v_holo, v_fs, _, v_ssim_amp, v_psnr_amp, v_ssim_img, v_psnr_img = combine_loss(
                             val_holo_out, val_target, val_rgbd,
                             propagator, hologram_params, training_params,
-                            loss_fn, loss_type, loss_params, pad=0
+                            loss_fn, loss_type, loss_params, pad=0,
+                            holo_method=loss_params.get('holo_method', 'phase_aligned')
                         )
                         val_holo_loss += v_holo.item()
                         val_fs_loss += v_fs.item()
