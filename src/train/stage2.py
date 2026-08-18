@@ -86,6 +86,9 @@ def parse_args():
     parser.add_argument('--unet-refine-blocks', type=int, default=0,
                         help='Number of full-res refine blocks before the '
                              'UNet output head (0 = disabled)')
+    parser.add_argument('--unet-tail-blocks', type=int, default=0,
+                        help='Full-res holonet-style tail layers after the '
+                             'UNet decoder (0 = disabled)')
     parser.add_argument('--unet-global-in', action='store_true',
                         help='Concat raw normalized input at the UNet output '
                              'head (holonet-style global skip)')
@@ -642,6 +645,7 @@ def main():
         "unet_stem_skip": args.unet_stem_skip,
         "unet_refine_blocks": args.unet_refine_blocks,
         "unet_global_in": args.unet_global_in,
+        "unet_tail_blocks": args.unet_tail_blocks,
         "interleave_rate": 1,
         "filter_width": 3,
         "bias_stddev": 0.01,
