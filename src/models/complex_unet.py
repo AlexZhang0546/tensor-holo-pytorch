@@ -84,6 +84,7 @@ class ComplexUNet(nn.Module):
         filter_width: 卷积核宽度（默认 3）。
         bias_stddev / weight_var_scale: 与 ComplexHoloNet 对齐的初始化参数（保留）。
         use_attention: 瓶颈层是否使用复数自注意力。
+        global_in: concat raw normalized input at output head (holonet-style last layer).
 
     输入:  (B, input_dim, H, W) 实数 RGBD/LDI
     输出:  complex_field (B, output_dim, H, W)，分辨率与输入相同，无激活。
