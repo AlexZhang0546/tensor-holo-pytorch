@@ -252,6 +252,8 @@ def main():
         unet_depth=args.unet_depth,
         unet_base_filters=args.unet_base_filters,
         unet_attention=args.unet_attention,
+        unet_stem_skip=args.unet_stem_skip,
+        unet_refine_blocks=args.unet_refine_blocks,
     ).to(device)
     load_model_weights(holonet, args.ckpt_path, device)
 

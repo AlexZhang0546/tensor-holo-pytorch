@@ -131,6 +131,12 @@ def build_original_parser():
                         help="Use deterministic focal-stack depth sampling")
     parser.add_argument("--unet-out-bn", action="store_true",
                         help="Add BatchNorm to the UNet output layer")
+    parser.add_argument("--unet-stem-skip", action="store_true",
+                        help="Add full-res stem bypass to the UNet output "
+                             "(zero-initialized; safe to resume from ckpt)")
+    parser.add_argument("--unet-refine-blocks", default=0, type=int,
+                        help="Full-res refine blocks before the UNet output "
+                             "head (0 = disabled)")
     parser.add_argument("--aperture-radius", default=None, type=int,
                         help="Frequency-domain aperture radius (pixels); "
                              "None = min(res_h,res_w)//2")
@@ -273,6 +279,9 @@ def _build_stage1_argv(args):
         argv.append("--deterministic-depths")
     if args.unet_out_bn:
         argv.append("--unet-out-bn")
+    if args.unet_stem_skip:
+        argv.append("--unet-stem-skip")
+    argv.append("--unet-refine-blocks=%d" % args.unet_refine_blocks)
     return argv
 
 
@@ -321,6 +330,9 @@ def _build_stage2_argv(args, cur_dir):
         argv.append("--deterministic-depths")
     if args.unet_out_bn:
         argv.append("--unet-out-bn")
+    if args.unet_stem_skip:
+        argv.append("--unet-stem-skip")
+    argv.append("--unet-refine-blocks=%d" % args.unet_refine_blocks)
     if args.aperture_radius is not None:
         argv.append("--aperture-radius=%d" % args.aperture_radius)
     return argv
@@ -359,6 +371,9 @@ def _build_validate_argv(args, val_mode, cur_dir):
     ])
     if args.unet_attention:
         argv.append("--unet-attention")
+    if args.unet_stem_skip:
+        argv.append("--unet-stem-skip")
+    argv.append("--unet-refine-blocks=%d" % args.unet_refine_blocks)
     return argv
 
 
@@ -391,6 +406,8 @@ def _build_eval_namespace(args, cur_dir):
         unet_depth=args.unet_depth,
         unet_base_filters=args.unet_base_filters,
         unet_attention=args.unet_attention,
+        unet_stem_skip=args.unet_stem_skip,
+        unet_refine_blocks=args.unet_refine_blocks,
     )
 
 
