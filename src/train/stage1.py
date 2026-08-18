@@ -192,7 +192,11 @@ def load_checkpoint(model, optimizer, filename):
             for k in result.unexpected_keys:
                 print("  ", k)
         if optimizer is not None and 'optimizer_state_dict' in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            try:
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            except (ValueError, RuntimeError) as e:
+                print("WARNING: optimizer state mismatch (%s); "
+                      "starting fresh optimizer" % e)
         start_epoch = checkpoint.get('epoch', 0)
         global_step = checkpoint.get('global_step', 0)
         return start_epoch, global_step
