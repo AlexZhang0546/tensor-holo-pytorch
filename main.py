@@ -125,6 +125,9 @@ def build_original_parser():
     parser.add_argument("--weight-holo", default=1.0, type=float,
                         help="Stage-1 complex-field (phase-aligned) loss weight "
                              "(0 = drop the holo fidelity term)")
+    parser.add_argument("--holo-method", default="phase_aligned", type=str,
+                        choices=["phase_aligned", "magnitude_phase", "complex_diff"],
+                        help="Stage-1 holo fidelity loss method")
     parser.add_argument("--freeze-bn", action="store_true",
                         help="Freeze BatchNorm running stats during stage1 "
                              "fine-tuning (model stays in eval mode)")
@@ -279,6 +282,7 @@ def _build_stage1_argv(args):
         argv.append("--unet-attention")
     argv.append("--weight-ssim=%s" % args.weight_ssim)
     argv.append("--weight-holo=%s" % args.weight_holo)
+    argv.append("--holo-method=%s" % args.holo_method)
     if args.freeze_bn:
         argv.append("--freeze-bn")
     argv.append("--weight-decay=%s" % args.weight_decay)
