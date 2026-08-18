@@ -100,7 +100,8 @@ class ComplexUNet(nn.Module):
                  use_attention: bool = False,
                  out_bn: bool = False,
                  stem_skip: bool = False,
-                 refine_blocks: int = 0):
+                 refine_blocks: int = 0,
+                 global_in: bool = False):
         super().__init__()
         self.input_dim = input_dim
         self.depth = depth
@@ -109,6 +110,7 @@ class ComplexUNet(nn.Module):
         self.out_bn_enabled = out_bn
         self.stem_skip_enabled = stem_skip
         self.refine_blocks = refine_blocks
+        self.global_in_enabled = global_in
         pad = filter_width // 2
 
         # ---- 编码器 ----
@@ -161,7 +163,8 @@ class ComplexUNet(nn.Module):
             self.refine = None
 
         # ---- 输出头（线性，无激活） ----
-        self.out_conv = ComplexConv2d(base_filters, output_dim, filter_width,
+        out_in = base_filters + (input_dim if global_in else 0)
+        self.out_conv = ComplexConv2d(out_in, output_dim, filter_width,
                                       padding=pad, bias=True)
         if stem_skip:
             # full-res stem bypass: inject input high-freq info into output.
@@ -220,7 +223,9 @@ class ComplexUNet(nn.Module):
             for blk in self.refine:
                 h = blk(h)
 
-        # 7. output head: decoder out + full-res stem bypass (optional)
+        # 7. output head: decoder out (+ raw input concat, holonet-style)
+        if self.global_in_enabled:
+            h = torch.cat([h, x], dim=1)
         out = self.out_conv(h)
         if self.stem_skip_conv is not None:
             out = out + self.stem_skip_conv(skips[0])
