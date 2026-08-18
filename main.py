@@ -122,6 +122,9 @@ def build_original_parser():
     parser.add_argument("--weight-ssim", default=0.0, type=float,
                         help="Weight of (1 - SSIM_img) in the joint loss "
                              "(0 = original behavior)")
+    parser.add_argument("--weight-holo", default=1.0, type=float,
+                        help="Stage-1 complex-field (phase-aligned) loss weight "
+                             "(0 = drop the holo fidelity term)")
     parser.add_argument("--freeze-bn", action="store_true",
                         help="Freeze BatchNorm running stats during stage1 "
                              "fine-tuning (model stays in eval mode)")
@@ -275,6 +278,7 @@ def _build_stage1_argv(args):
     if args.unet_attention:
         argv.append("--unet-attention")
     argv.append("--weight-ssim=%s" % args.weight_ssim)
+    argv.append("--weight-holo=%s" % args.weight_holo)
     if args.freeze_bn:
         argv.append("--freeze-bn")
     argv.append("--weight-decay=%s" % args.weight_decay)
