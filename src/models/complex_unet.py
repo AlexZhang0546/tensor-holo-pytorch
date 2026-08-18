@@ -97,13 +97,17 @@ class ComplexUNet(nn.Module):
                  bias_stddev: float = 0.01,
                  weight_var_scale: float = 0.25,
                  use_attention: bool = False,
-                 out_bn: bool = False):
+                 out_bn: bool = False,
+                 stem_skip: bool = False,
+                 refine_blocks: int = 0):
         super().__init__()
         self.input_dim = input_dim
         self.depth = depth
         self.base_filters = base_filters
         self.use_attention = use_attention
         self.out_bn_enabled = out_bn
+        self.stem_skip_enabled = stem_skip
+        self.refine_blocks = refine_blocks
         pad = filter_width // 2
 
         # ---- 编码器 ----
@@ -145,9 +149,31 @@ class ComplexUNet(nn.Module):
             self.decoder_blocks.append(ComplexResBlock(
                 out_ch, filter_width, bias_stddev, weight_var_scale))
 
+        # ---- full-res refine blocks (optional, before output head) ----
+        if refine_blocks > 0:
+            self.refine = nn.ModuleList([
+                ComplexResBlock(base_filters, filter_width, bias_stddev,
+                                weight_var_scale)
+                for _ in range(refine_blocks)
+            ])
+        else:
+            self.refine = None
+
         # ---- 输出头（线性，无激活） ----
         self.out_conv = ComplexConv2d(base_filters, output_dim, filter_width,
                                       padding=pad, bias=True)
+        if stem_skip:
+            # full-res stem bypass: inject input high-freq info into output.
+            # zero-initialized so resuming from an existing ckpt is a no-op.
+            self.stem_skip_conv = ComplexConv2d(base_filters, output_dim, 1,
+                                                bias=True)
+            with torch.no_grad():
+                self.stem_skip_conv.conv_real.weight.zero_()
+                self.stem_skip_conv.conv_imag.weight.zero_()
+                self.stem_skip_conv.conv_real.bias.zero_()
+                self.stem_skip_conv.conv_imag.bias.zero_()
+        else:
+            self.stem_skip_conv = None
         if out_bn:
             # 与 ComplexHoloNet 最后一层一致：conv + BN（无激活）
             self.out_bn = ComplexBatchNorm2d(output_dim)
@@ -189,7 +215,15 @@ class ComplexUNet(nn.Module):
             h = self.decoder_blocks[j](self.reduce_convs[j](h))
 
         # 6. 输出头并裁剪回原始分辨率
+        # 6. full-res refine (optional)
+        if self.refine is not None:
+            for blk in self.refine:
+                h = blk(h)
+
+        # 7. output head: decoder out + full-res stem bypass (optional)
         out = self.out_conv(h)
+        if self.stem_skip_conv is not None:
+            out = out + self.stem_skip_conv(skips[0])
         if self.out_bn is not None:
             out = self.out_bn(out)
         if pad_h or pad_w:
