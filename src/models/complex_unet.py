@@ -72,6 +72,39 @@ class ComplexSelfAttention(nn.Module):
         return self.out(out) + x
 
 
+class ComplexHoloTail(nn.Module):
+    # Full-resolution tail mirroring ComplexHoloNet's layer pattern:
+    # each layer = conv -> BN -> modReLU, with dense-ish connections
+    # (layer j takes prev[j-1] + prev[j-2] for j>=3 and odd).
+    # Gives the per-pixel mixing capacity needed to synthesize the
+    # high-frequency hologram-plane field.
+    def __init__(self, channels, num_blocks, filter_width=3,
+                 bias_stddev=0.01, weight_var_scale=0.25):
+        super().__init__()
+        pad = filter_width // 2
+        self.layers = nn.ModuleList()
+        for _ in range(num_blocks):
+            self.layers.append(nn.Sequential(
+                ComplexConv2d(channels, channels, filter_width, padding=pad,
+                              bias=True),
+                ComplexBatchNorm2d(channels),
+                ComplexReLU(channels),
+            ))
+
+    def forward(self, x):
+        prev_outputs = [x]
+        for j, layer in enumerate(self.layers):
+            if j == 0:
+                prev = x
+            elif j < 3 or (j % 2 == 0):
+                prev = prev_outputs[j - 1]
+            else:
+                prev = prev_outputs[j - 1] + prev_outputs[j - 2]
+            out = layer(prev)
+            prev_outputs.append(out)
+        return prev_outputs[-1]
+
+
 class ComplexUNet(nn.Module):
     """
     多尺度复数 U-Net 主网络。
@@ -101,7 +134,8 @@ class ComplexUNet(nn.Module):
                  out_bn: bool = False,
                  stem_skip: bool = False,
                  refine_blocks: int = 0,
-                 global_in: bool = False):
+                 global_in: bool = False,
+                 tail_blocks: int = 0):
         super().__init__()
         self.input_dim = input_dim
         self.depth = depth
@@ -111,6 +145,7 @@ class ComplexUNet(nn.Module):
         self.stem_skip_enabled = stem_skip
         self.refine_blocks = refine_blocks
         self.global_in_enabled = global_in
+        self.tail_blocks = tail_blocks
         pad = filter_width // 2
 
         # ---- 编码器 ----
@@ -161,6 +196,21 @@ class ComplexUNet(nn.Module):
             ])
         else:
             self.refine = None
+
+        # ---- deep full-res holonet-style tail ----
+        if tail_blocks > 0:
+            self.tail = ComplexHoloTail(base_filters, tail_blocks, filter_width,
+                                        bias_stddev, weight_var_scale)
+            # zero-init gate: resuming from a trained ckpt stays a no-op
+            self.tail_gate = ComplexConv2d(base_filters, base_filters, 1, bias=True)
+            with torch.no_grad():
+                self.tail_gate.conv_real.weight.zero_()
+                self.tail_gate.conv_imag.weight.zero_()
+                self.tail_gate.conv_real.bias.zero_()
+                self.tail_gate.conv_imag.bias.zero_()
+        else:
+            self.tail = None
+            self.tail_gate = None
 
         # ---- 输出头（线性，无激活） ----
         out_in = base_filters + (input_dim if global_in else 0)
@@ -222,6 +272,10 @@ class ComplexUNet(nn.Module):
         if self.refine is not None:
             for blk in self.refine:
                 h = blk(h)
+
+        # 6b. deep full-res tail (optional)
+        if self.tail is not None:
+            h = h + self.tail_gate(self.tail(h))
 
         # 7. output head: decoder out (+ raw input concat, holonet-style)
         if self.global_in_enabled:
