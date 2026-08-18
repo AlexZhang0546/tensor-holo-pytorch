@@ -21,7 +21,8 @@ def build_main_net(*,
                    unet_attention: bool = False,
                    unet_out_bn: bool = False,
                    unet_stem_skip: bool = False,
-                   unet_refine_blocks: int = 0):
+                   unet_refine_blocks: int = 0,
+                   unet_global_in: bool = False):
     """构建主网络。
 
     arch="unet" 时使用多尺度 ComplexUNet（depth 为下采样级数，
@@ -41,6 +42,7 @@ def build_main_net(*,
             out_bn=unet_out_bn,
             stem_skip=unet_stem_skip,
             refine_blocks=unet_refine_blocks,
+            global_in=unet_global_in,
         )
     return ComplexHoloNet(
         input_dim=input_dim,

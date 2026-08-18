@@ -137,6 +137,9 @@ def build_original_parser():
     parser.add_argument("--unet-refine-blocks", default=0, type=int,
                         help="Full-res refine blocks before the UNet output "
                              "head (0 = disabled)")
+    parser.add_argument("--unet-global-in", action="store_true",
+                        help="Concat raw normalized input at the UNet output "
+                             "head (holonet-style global skip)")
     parser.add_argument("--aperture-radius", default=None, type=int,
                         help="Frequency-domain aperture radius (pixels); "
                              "None = min(res_h,res_w)//2")
@@ -281,6 +284,8 @@ def _build_stage1_argv(args):
         argv.append("--unet-out-bn")
     if args.unet_stem_skip:
         argv.append("--unet-stem-skip")
+    if args.unet_global_in:
+        argv.append("--unet-global-in")
     argv.append("--unet-refine-blocks=%d" % args.unet_refine_blocks)
     return argv
 
@@ -332,6 +337,8 @@ def _build_stage2_argv(args, cur_dir):
         argv.append("--unet-out-bn")
     if args.unet_stem_skip:
         argv.append("--unet-stem-skip")
+    if args.unet_global_in:
+        argv.append("--unet-global-in")
     argv.append("--unet-refine-blocks=%d" % args.unet_refine_blocks)
     if args.aperture_radius is not None:
         argv.append("--aperture-radius=%d" % args.aperture_radius)
@@ -373,6 +380,8 @@ def _build_validate_argv(args, val_mode, cur_dir):
         argv.append("--unet-attention")
     if args.unet_stem_skip:
         argv.append("--unet-stem-skip")
+    if args.unet_global_in:
+        argv.append("--unet-global-in")
     argv.append("--unet-refine-blocks=%d" % args.unet_refine_blocks)
     return argv
 
@@ -408,6 +417,7 @@ def _build_eval_namespace(args, cur_dir):
         unet_attention=args.unet_attention,
         unet_stem_skip=args.unet_stem_skip,
         unet_refine_blocks=args.unet_refine_blocks,
+        unet_global_in=args.unet_global_in,
     )
 
 

@@ -86,6 +86,9 @@ def parse_args():
     parser.add_argument('--unet-refine-blocks', type=int, default=0,
                         help='Number of full-res refine blocks before the '
                              'UNet output head (0 = disabled)')
+    parser.add_argument('--unet-global-in', action='store_true',
+                        help='Concat raw normalized input at the UNet output '
+                             'head (holonet-style global skip)')
     parser.add_argument('--weight-fs', type=float, default=20.0,
                         help='Focal stack loss weight (reference default: '
                              'num_top_depth + num_random_depth = 20)')
@@ -638,6 +641,7 @@ def main():
         "unet_out_bn": args.unet_out_bn,
         "unet_stem_skip": args.unet_stem_skip,
         "unet_refine_blocks": args.unet_refine_blocks,
+        "unet_global_in": args.unet_global_in,
         "interleave_rate": 1,
         "filter_width": 3,
         "bias_stddev": 0.01,
