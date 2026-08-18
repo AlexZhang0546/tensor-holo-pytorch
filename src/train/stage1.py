@@ -60,6 +60,9 @@ def parse_args():
                         help='Weight of the phase-aligned complex-field fidelity '
                              'loss in stage 1 (0 = drop it; helps if the GT '
                              'phase is unreachable and conflicts with SSIM)')
+    parser.add_argument('--holo-method', type=str, default='phase_aligned',
+                        choices=['phase_aligned', 'magnitude_phase', 'complex_diff'],
+                        help='Holo fidelity loss method (phase_aligned = original TF)')
     parser.add_argument('--freeze-bn', action='store_true',
                         help='Freeze BatchNorm running stats during training '
                              '(model stays in eval mode; use for fine-tuning '
