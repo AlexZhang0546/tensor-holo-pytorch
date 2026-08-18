@@ -214,7 +214,6 @@ class ComplexUNet(nn.Module):
             h = torch.cat([h, skip], dim=1)
             h = self.decoder_blocks[j](self.reduce_convs[j](h))
 
-        # 6. 输出头并裁剪回原始分辨率
         # 6. full-res refine (optional)
         if self.refine is not None:
             for blk in self.refine:
