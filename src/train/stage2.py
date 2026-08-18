@@ -80,6 +80,12 @@ def parse_args():
                         help='ComplexUNet base filters (shallowest level)')
     parser.add_argument('--unet-attention', action='store_true',
                         help='Enable bottleneck self-attention in ComplexUNet')
+    parser.add_argument('--unet-stem-skip', action='store_true',
+                        help='Add full-res stem bypass to the UNet output '
+                             '(zero-initialized; safe to resume from ckpt)')
+    parser.add_argument('--unet-refine-blocks', type=int, default=0,
+                        help='Number of full-res refine blocks before the '
+                             'UNet output head (0 = disabled)')
     parser.add_argument('--weight-fs', type=float, default=20.0,
                         help='Focal stack loss weight (reference default: '
                              'num_top_depth + num_random_depth = 20)')
@@ -621,6 +627,8 @@ def main():
         "unet_base_filters": args.unet_base_filters,
         "unet_attention": args.unet_attention,
         "unet_out_bn": args.unet_out_bn,
+        "unet_stem_skip": args.unet_stem_skip,
+        "unet_refine_blocks": args.unet_refine_blocks,
         "interleave_rate": 1,
         "filter_width": 3,
         "bias_stddev": 0.01,

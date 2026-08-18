@@ -70,6 +70,12 @@ def parse_args():
     parser.add_argument('--unet-out-bn', action='store_true',
                         help='Add BatchNorm to the UNet output layer '
                              '(mirrors ComplexHoloNet last layer)')
+    parser.add_argument('--unet-stem-skip', action='store_true',
+                        help='Add full-res stem bypass to the UNet output '
+                             '(zero-initialized; safe to resume from ckpt)')
+    parser.add_argument('--unet-refine-blocks', type=int, default=0,
+                        help='Number of full-res refine blocks before the '
+                             'UNet output head (0 = disabled)')
     return parser.parse_args()
 
 
@@ -88,6 +94,8 @@ def build_model(model_params):
         unet_base_filters=model_params.get("unet_base_filters", 24),
         unet_attention=model_params.get("unet_attention", False),
         unet_out_bn=model_params.get("unet_out_bn", False),
+        unet_stem_skip=model_params.get("unet_stem_skip", False),
+        unet_refine_blocks=model_params.get("unet_refine_blocks", 0),
     )
 
 
@@ -395,7 +403,8 @@ def main():
         "unet_base_filters": args.unet_base_filters,
         "unet_attention": args.unet_attention,
         "unet_out_bn": args.unet_out_bn,
-        "unet_out_bn": args.unet_out_bn,
+        "unet_stem_skip": args.unet_stem_skip,
+        "unet_refine_blocks": args.unet_refine_blocks,
         "interleave_rate": 1,
         "filter_width": 3,
         "bias_stddev": 0.01,

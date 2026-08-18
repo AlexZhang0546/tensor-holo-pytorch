@@ -218,6 +218,10 @@ def main():
                         help='ComplexUNet base filters (shallowest level)')
     parser.add_argument('--unet-attention', action='store_true',
                         help='Enable bottleneck self-attention in ComplexUNet')
+    parser.add_argument('--unet-stem-skip', action='store_true',
+                        help='Add full-res stem bypass to the UNet output')
+    parser.add_argument('--unet-refine-blocks', type=int, default=0,
+                        help='Full-res refine blocks before the UNet output head')
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
