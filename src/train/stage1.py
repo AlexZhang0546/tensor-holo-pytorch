@@ -181,7 +181,16 @@ def load_checkpoint(model, optimizer, filename):
     if os.path.isfile(filename):
         print(f"Loading checkpoint from {filename}")
         checkpoint = torch.load(filename)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        result = model.load_state_dict(checkpoint['model_state_dict'],
+                                       strict=False)
+        if result.missing_keys:
+            print("NOTE: missing keys in checkpoint (new zero-init modules):")
+            for k in result.missing_keys:
+                print("  ", k)
+        if result.unexpected_keys:
+            print("NOTE: unexpected keys in checkpoint (ignored):")
+            for k in result.unexpected_keys:
+                print("  ", k)
         if optimizer is not None and 'optimizer_state_dict' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint.get('epoch', 0)

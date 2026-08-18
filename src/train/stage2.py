@@ -342,7 +342,16 @@ def train_stage2(
     if stage1_ckpt_path and os.path.exists(stage1_ckpt_path):
         print(f"Loading stage1 checkpoint from {stage1_ckpt_path}")
         ckpt = load_checkpoint(stage1_ckpt_path)
-        holonet.load_state_dict(ckpt['model_state_dict'])
+        result = holonet.load_state_dict(ckpt['model_state_dict'],
+                                         strict=False)
+        if result.missing_keys:
+            print("NOTE: missing keys in stage1 ckpt (new zero-init modules):")
+            for k in result.missing_keys:
+                print("  ", k)
+        if result.unexpected_keys:
+            print("NOTE: unexpected keys in stage1 ckpt (ignored):")
+            for k in result.unexpected_keys:
+                print("  ", k)
     else:
         print("WARNING: No stage1 checkpoint provided or file not found. Starting with random holonet weights.")
 
