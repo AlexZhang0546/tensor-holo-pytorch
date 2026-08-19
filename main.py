@@ -253,6 +253,10 @@ def build_original_parser():
     parser.add_argument("--dry-run", action="store_true",
                         help="Print the translated command and exit "
                              "without running")
+    parser.add_argument("--ddpm-arch", default="real", choices=["real", "complex"],
+                        help="DDPM architecture (real: paper amp/phase CNN; complex: complex CNN)")
+    parser.add_argument("--ddpm-bn", default="tf", choices=["tf", "batch"],
+                        help="DDPM BN semantics (tf: like main_v2.py; batch: PyTorch BN)")
     return parser
 
 
@@ -353,6 +357,8 @@ def _build_stage2_argv(args, cur_dir):
         argv.append("--unet-global-in")
     argv.append("--unet-refine-blocks=%d" % args.unet_refine_blocks)
     argv.append("--unet-tail-blocks=%d" % args.unet_tail_blocks)
+    argv.append("--ddpm-arch=%s" % args.ddpm_arch)
+    argv.append("--ddpm-bn=%s" % args.ddpm_bn)
     if args.aperture_radius is not None:
         argv.append("--aperture-radius=%d" % args.aperture_radius)
     return argv
@@ -382,6 +388,8 @@ def _build_validate_argv(args, val_mode, cur_dir):
         argv.append("--bypass-ddpm-network")
     if args.ddpm_ckpt_path:
         argv.append("--ddpm-ckpt-path=%s" % args.ddpm_ckpt_path)
+    argv.append("--ddpm-arch=%s" % args.ddpm_arch)
+    argv.append("--ddpm-bn=%s" % args.ddpm_bn)
     if args.aperture_radius is not None:
         argv.append("--aperture-radius=%d" % args.aperture_radius)
     argv.extend([
@@ -405,6 +413,8 @@ def _build_eval_namespace(args, cur_dir):
     return argparse.Namespace(
         ckpt_path=ckpt,
         ddpm_ckpt_path=args.ddpm_ckpt_path,
+        ddpm_arch=args.ddpm_arch,
+        ddpm_bn=args.ddpm_bn,
         activate_ddpm=args.activate_ddpm,
         bypass_ddpm_network=args.bypass_ddpm_network,
         num_layers=args.num_layers,
@@ -455,6 +465,8 @@ def _build_export_argv(args, cur_dir):
         argv.append("--activate-ddpm")
     if args.ddpm_ckpt_path:
         argv.append("--ddpm-ckpt-path=%s" % args.ddpm_ckpt_path)
+    argv.append("--ddpm-arch=%s" % args.ddpm_arch)
+    argv.append("--ddpm-bn=%s" % args.ddpm_bn)
     argv.extend([
         "--model-arch=%s" % args.model_arch,
         "--unet-depth=%d" % args.unet_depth,

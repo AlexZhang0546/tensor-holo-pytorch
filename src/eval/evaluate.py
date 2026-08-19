@@ -19,7 +19,8 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.models.factory import build_main_net
-from src.models.ddpm_net import ComplexDDPMNet          # 复数 DDPM 网络
+from src.models.ddpm_net import ComplexDDPMNet
+from src.models.real_ddpm_net import build_ddpm_net          # 复数 DDPM 网络
 from src.optics.propagation import propagator_factory
 from src.optics.complex_utils import compl_val, compl_exp
 from src.optics.dpm import aadpm, bldpm, dpm_maimone
@@ -122,15 +123,10 @@ def evaluate(args):
     # 复数 DDPM 网络（替换原实数 DDPM）
     ddpm_net = None
     if args.activate_ddpm and not args.bypass_ddpm_network:
-        ddpm_net = ComplexDDPMNet(
-            input_dim=3,               # 复数 RGB 三通道
-            output_dim=3,
-            num_layers=8,
-            num_filters_per_layer=8,
-            interleave_rate=1,
-            filter_width=3,
-            bias_stddev=0.01,
-            weight_var_scale=0.25
+        ddpm_net = build_ddpm_net(
+            {"input_dim": 3, "output_dim": 3, "num_layers": 8,
+             "num_filters_per_layer": 8, "weight_var_scale": 0.25},
+            arch=args.ddpm_arch, bn_mode=args.ddpm_bn
         ).to(device)
         if args.ddpm_ckpt_path:
             ddpm_checkpoint = torch.load(args.ddpm_ckpt_path, map_location=device)
@@ -307,5 +303,9 @@ if __name__ == '__main__':
     parser.add_argument('--phs-max', type=float, default=2.0)
     parser.add_argument('--k', type=float, default=1.0)
     parser.add_argument('--pitch', type=float, default=0.008)
+    parser.add_argument('--ddpm-arch', default='real', choices=['real', 'complex'],
+                        help='DDPM architecture (real: paper amp/phase CNN)')
+    parser.add_argument('--ddpm-bn', default='tf', choices=['tf', 'batch'],
+                        help='DDPM BN semantics (tf: like main_v2.py; batch: PyTorch BN)')
     args = parser.parse_args()
     evaluate(args)

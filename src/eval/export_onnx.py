@@ -14,6 +14,7 @@ import numpy as np
 
 from src.models.factory import build_main_net
 from src.models.ddpm_net import ComplexDDPMNet
+from src.models.real_ddpm_net import build_ddpm_net
 from typing import Optional
 
 
@@ -120,6 +121,10 @@ if __name__ == "__main__":
     parser.add_argument("--unet-attention", action="store_true",
                         help="Enable bottleneck self-attention in ComplexUNet")
 
+    parser.add_argument("--ddpm-arch", default="real", choices=["real", "complex"],
+                        help="DDPM architecture (real: paper amp/phase CNN)")
+    parser.add_argument("--ddpm-bn", default="tf", choices=["tf", "batch"],
+                        help="DDPM BN semantics (tf: like main_v2.py; batch: PyTorch BN)")
     args = parser.parse_args()
 
     device = "cpu"  # 导出一般用 CPU 即可
@@ -145,8 +150,10 @@ if __name__ == "__main__":
     # 可选的 DDPM 网络（复数版本）
     ddpm_net = None
     if args.activate_ddpm:
-        ddpm_net = ComplexDDPMNet(
-            input_dim=3, output_dim=3, num_layers=8, num_filters_per_layer=8
+        ddpm_net = build_ddpm_net(
+            {"input_dim": 3, "output_dim": 3,
+             "num_layers": 8, "num_filters_per_layer": 8},
+            arch=args.ddpm_arch, bn_mode=args.ddpm_bn
         ).to(device)
         if args.ddpm_ckpt_path:
             ddpm_checkpoint = torch.load(args.ddpm_ckpt_path, map_location=device)
