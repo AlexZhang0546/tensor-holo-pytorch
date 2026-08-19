@@ -32,6 +32,7 @@ from src.losses.focal_stack import compute_focal_stack_loss
 from src.losses.complex_losses import complex_holo_loss
 from src.utils.metrics import compute_ssim, compute_psnr
 from src.losses.ddpm_loss import compute_ddpm_phase_loss
+from src.train.stage1 import combine_loss
 
 
 def parse_args():
@@ -554,7 +555,8 @@ def train_stage2(
                     ddpm_net.eval()
 
                 val_stats = {'loss': 0.0, 'fs_loss': 0.0, 'fs_tv': 0.0,
-                             'ssim_amp': 0.0, 'ssim_img': 0.0, 'mean_loss': 0.0, 'std_loss': 0.0}
+                             'ssim_amp': 0.0, 'ssim_img': 0.0, 'mean_loss': 0.0, 'std_loss': 0.0,
+                             'pre_ssim_amp': 0.0, 'pre_ssim_img': 0.0}
                 num_val_batches = 0
                 with torch.no_grad():
                     for val_batch in val_loader:
@@ -571,6 +573,16 @@ def train_stage2(
                         )
                         for k in val_stats:
                             val_stats[k] += val_outputs[k].item()
+                        # pre-DPM (paper Table 2) metrics: main CNN output only
+                        val_target = compl_val(val_amp_gt, (val_phs_gt - 0.5) * 2.0 * np.pi)
+                        val_holo_pre = holonet(val_rgbd)
+                        _, _, _, _, v_pre_amp, _, v_pre_img, _ = combine_loss(
+                            val_holo_pre, val_target, val_rgbd,
+                            propagator_pad, hologram_params, training_params,
+                            loss_fn, 'l1', loss_params, pad=0,
+                            holo_method=loss_params.get('holo_method', 'phase_aligned'))
+                        val_stats['pre_ssim_amp'] += v_pre_amp.item()
+                        val_stats['pre_ssim_img'] += v_pre_img.item()
                         num_val_batches += 1
 
                 for k in val_stats:
@@ -579,6 +591,7 @@ def train_stage2(
                 print(f"--- Validation at step {global_step} ---")
                 print(f"Loss: {val_stats['loss']:.6f} | FS: {val_stats['fs_loss']:.6f} | TV: {val_stats['fs_tv']:.6f} | "
                       f"SSIM_amp: {val_stats['ssim_amp']:.4f} | SSIM_img: {val_stats['ssim_img']:.4f}")
+                print(f"Pre-DPM SSIM_amp: {val_stats['pre_ssim_amp']:.4f} | Pre-DPM SSIM_img: {val_stats['pre_ssim_img']:.4f}")
                 if not bypass_ddpm and ddpm_net is not None:
                     print(f"Mean: {val_stats['mean_loss']:.6f} | Std: {val_stats['std_loss']:.6f}")
 
