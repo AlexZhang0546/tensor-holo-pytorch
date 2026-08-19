@@ -1,4 +1,4 @@
-﻿# src/models/real_ddpm_net.py
+# src/models/real_ddpm_net.py
 """Paper-faithful DDPM network (real-valued amp/phase CNN).
 
 This mirrors the TF reference implementation in main_v2.py
