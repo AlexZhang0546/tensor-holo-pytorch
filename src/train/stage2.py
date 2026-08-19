@@ -22,6 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.models.factory import build_main_net
 from src.models.ddpm_net import ComplexDDPMNet
+from src.models.real_ddpm_net import build_ddpm_net
 from src.data.dataset import THDataset, create_dataloader
 from src.optics.propagation import propagator_factory
 from src.optics.complex_utils import compl_val, compl_exp
@@ -119,6 +120,10 @@ def parse_args():
     # 别名：与原始 main_v2.py 的参数名保持一致
     parser.add_argument('--train-depth-shift', dest='depth_shift',
                         default=12.0, type=float, help=argparse.SUPPRESS)
+    parser.add_argument('--ddpm-arch', default='real', choices=['real', 'complex'],
+                        help='DDPM architecture (real: paper amp/phase CNN; complex: complex CNN)')
+    parser.add_argument('--ddpm-bn', default='tf', choices=['tf', 'batch'],
+                        help='DDPM BN semantics (tf: like main_v2.py; batch: PyTorch BN)')
     return parser.parse_args()
 
 
@@ -338,11 +343,15 @@ def train_stage2(
     train_loader, val_loader, device,
     stage1_ckpt_path, stage2_ckpt_dir,
     restore_stage2=False,
-    bypass_ddpm=False
+    bypass_ddpm=False,
+    ddpm_arch='real',
+    ddpm_bn='tf'
 ):
     # ---------- 构建模型（复数版本） ----------
     holonet = build_main_net(**model_params).to(device)
-    ddpm_net = ComplexDDPMNet(**ddpm_params).to(device) if not bypass_ddpm else None
+    ddpm_net = None
+    if not bypass_ddpm:
+        ddpm_net = build_ddpm_net(ddpm_params, arch=ddpm_arch, bn_mode=ddpm_bn).to(device)
 
     # ---------- 加载 stage1 权重 ----------
     if stage1_ckpt_path and os.path.exists(stage1_ckpt_path):
@@ -443,9 +452,16 @@ def train_stage2(
                 holo_shifted = propagator_pad(holo_mid_padded, depth_shift) * \
                                compl_exp(-2 * np.pi * depth_shift / wavelengths_tensor)
 
-                holo_altered = ddpm_net(holo_shifted)
-
-                total_loss, ssim_amp = identity_loss(holo_altered, holo_shifted, loss_fn)
+                if hasattr(ddpm_net, 'forward_amp_phase'):
+                    amp_altered, phs_altered = ddpm_net.forward_amp_phase(holo_shifted)
+                    amp_shifted = holo_shifted.abs()
+                    phs_shifted = holo_shifted.angle() / (2.0 * np.pi) + 0.5
+                    total_loss = loss_fn(amp_altered, amp_shifted) + \
+                                 loss_fn(phs_altered, phs_shifted)
+                    ssim_amp = compute_ssim(amp_altered, amp_shifted, data_range=1.0)
+                else:
+                    holo_altered = ddpm_net(holo_shifted)
+                    total_loss, ssim_amp = identity_loss(holo_altered, holo_shifted, loss_fn)
 
                 optimizer_identity.zero_grad()
                 total_loss.backward()
@@ -715,7 +731,9 @@ def main():
         stage1_ckpt_path=args.stage1_ckpt if args.restore_stage1 else None,
         stage2_ckpt_dir=stage2_ckpt_dir,
         restore_stage2=args.restore_stage2,
-        bypass_ddpm=args.bypass_ddpm_network or not args.activate_ddpm
+        bypass_ddpm=args.bypass_ddpm_network or not args.activate_ddpm,
+        ddpm_arch=args.ddpm_arch,
+        ddpm_bn=args.ddpm_bn
     )
 
 
