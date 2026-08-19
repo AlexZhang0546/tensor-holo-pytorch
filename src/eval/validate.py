@@ -223,6 +223,8 @@ def main():
                         help='Add full-res stem bypass to the UNet output')
     parser.add_argument('--unet-refine-blocks', type=int, default=0,
                         help='Full-res refine blocks before the UNet output head')
+    parser.add_argument('--unet-tail-blocks', type=int, default=0,
+                        help='Full-res holonet-style tail layers after the UNet decoder')
     parser.add_argument('--unet-global-in', action='store_true',
                         help='Concat raw normalized input at the UNet output head')
     parser.add_argument('--ddpm-arch', default='real', choices=['real', 'complex'],
@@ -262,6 +264,7 @@ def main():
         unet_stem_skip=args.unet_stem_skip,
         unet_refine_blocks=args.unet_refine_blocks,
         unet_global_in=args.unet_global_in,
+        unet_tail_blocks=args.unet_tail_blocks,
     ).to(device)
     load_model_weights(holonet, args.ckpt_path, device)
 
