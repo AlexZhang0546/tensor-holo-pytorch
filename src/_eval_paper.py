@@ -22,7 +22,12 @@ def build_propagator(res_h, res_w, pitch, wavelengths, double_pad=True):
 
 def load_weights(model, ckpt_path, device):
     ckpt = torch.load(ckpt_path, map_location=device)
-    sd = ckpt.get('model_state_dict', ckpt)
+    if 'model_state_dict' in ckpt:
+        sd = ckpt['model_state_dict']
+    elif 'holonet_state_dict' in ckpt:
+        sd = ckpt['holonet_state_dict']
+    else:
+        sd = ckpt
     res = model.load_state_dict(sd, strict=False)
     if res.missing_keys:
         print("missing keys:", res.missing_keys[:8])
@@ -100,7 +105,10 @@ def main():
             load_weights(ddpm_net, args.ddpm_ckpt_path, device)
         else:
             ck = torch.load(args.ckpt_path, map_location=device)
-            ddpm_net.load_state_dict(ck['ddpm_net_state_dict'])
+            if 'ddpm_net_state_dict' in ck:
+                ddpm_net.load_state_dict(ck['ddpm_net_state_dict'])
+            else:
+                load_weights(ddpm_net, args.ckpt_path, device)
         ddpm_net.eval()
 
     cur_dir = os.getcwd()
