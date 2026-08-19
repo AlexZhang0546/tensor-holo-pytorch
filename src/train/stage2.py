@@ -702,6 +702,8 @@ def main():
         "weight_fs_tv": args.weight_fs_tv,
         "weight_std": args.weight_std,
         "weight_mean": args.weight_mean,
+        "weight_holo_joint": args.weight_holo_joint,
+        "weight_ssim": args.weight_ssim,
         "phs_max": [2 * np.pi, 2 * np.pi, 2 * np.pi]   # 关键：相位最大值
     }
 
