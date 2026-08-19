@@ -70,7 +70,7 @@ with torch.no_grad():
     phs_only_t, amp_max_t = aadpm(rt_t, depth_shift=0.0, sigma=0.0, kernel_width=3,
                                   phs_max=None, amp_max=None, clamp=True, normalize=False)
     amp_f, phs_f = filter_phs_only(phs_only_t, unnormalize_input=False, normalize_output=False,
-                                   depth_shift=0.0, radius=RAD, phs_max=None, amp_max=amp_max_t)
+                                   depth_shift=0.0, radius=RAD, res_h=RES, res_w=RES, phs_max=None, amp_max=amp_max_t)
 rt_enc_t = compl_val(amp_f, phs_f).squeeze(0).numpy()
 
 def metrics(a, b, tag):
