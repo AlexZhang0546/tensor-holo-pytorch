@@ -22,7 +22,8 @@ LR = float(sys.argv[2]) if len(sys.argv) > 2 else 3e-3
 WSSIM = float(sys.argv[3]) if len(sys.argv) > 3 else 100.0
 IMGS = [int(s) for s in sys.argv[4].split(",")] if len(sys.argv) > 4 else [0]
 GLOBAL_AM = int(sys.argv[5]) if len(sys.argv) > 5 else 0
-print("ITERS", ITERS, "LR", LR, "WSSIM", WSSIM, "IMGS", IMGS, "GLOBAL_AM", GLOBAL_AM, flush=True)
+RADIUS = int(sys.argv[6]) if len(sys.argv) > 6 else 192
+print("ITERS", ITERS, "LR", LR, "WSSIM", WSSIM, "IMGS", IMGS, "GLOBAL_AM", GLOBAL_AM, "RADIUS", RADIUS, flush=True)
 
 hp = {"wavelengths": wav, "pitch": 0.008, "res_h": RES, "res_w": RES,
       "depth_base": -3, "depth_scale": 6, "double_pad": True}
@@ -70,7 +71,7 @@ for k, batch in enumerate(samples):
                                   wavelength=wav)
         amp_f, phs_f = filter_phs_only(phs_only, unnormalize_input=False, normalize_output=False,
                                        propagator=prop, depth_shift=-depth_shift, batch=1,
-                                       num_channels=3, res_h=RES, res_w=RES, radius=None,
+                                       num_channels=3, res_h=RES, res_w=RES, radius=RADIUS,
                                        phs_max=None, amp_max=amp_max, wavelength=wav)
         holo_out = compl_val(amp_f, phs_f)
         fs, tv, ssim_img, _ = compute_focal_stack_loss(holo_out, holo_gt, rgbd, prop, hp, tp, F.l1_loss, 0)
