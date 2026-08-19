@@ -7,7 +7,7 @@ import os, sys, argparse, time
 import numpy as np
 import torch
 import torch.nn.functional as F
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.models.factory import build_main_net
 from src.models.real_ddpm_net import build_ddpm_net
