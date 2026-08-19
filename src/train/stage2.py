@@ -572,7 +572,8 @@ def train_stage2(
                             bypass_ddpm=bypass_ddpm
                         )
                         for k in val_stats:
-                            val_stats[k] += val_outputs[k].item()
+                            if k in val_outputs:
+                                val_stats[k] += val_outputs[k].item()
                         # pre-DPM (paper Table 2) metrics: main CNN output only
                         val_target = compl_val(val_amp_gt, (val_phs_gt - 0.5) * 2.0 * np.pi)
                         val_holo_pre = holonet(val_rgbd)
