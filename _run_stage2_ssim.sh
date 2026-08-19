@@ -9,6 +9,6 @@ $PY main.py --train-mode --train-stage stage2 \
   --stage1-ckpt model/stage1_unet_d2t16/stage1_latest.pth \
   --stage2-ckpt-dir model/stage2_d2t16 \
   --stage2-epochs 0 --joint-epochs 300 --train-depth-shift 12.0 \
-  --weight-holo-joint 0 --weight-ssim 10 --num-iter-per-test 500 --ddpm-arch complex \
-  --batch 2 --learning-rate 1e-4 \
+  --weight-holo-joint 0 --weight-ssim 20 --num-iter-per-test 500 --ddpm-arch complex \
+  --batch 2 --learning-rate 2e-4 \
   2>&1 | tee stage2_d2t16_joint_ssim.log
