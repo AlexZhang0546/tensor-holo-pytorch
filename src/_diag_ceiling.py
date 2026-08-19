@@ -145,5 +145,5 @@ for it in range(ITERS):
     loss.backward()
     opt.step()
     if it % 500 == 0 or it == ITERS - 1:
-        report("B_free", it, loss, fs, ssim_img, holo_out, t0)
+        report("B_free", it, loss, fs, ssim_img, holo_out.abs(), t0)
 print("DONE", flush=True)
