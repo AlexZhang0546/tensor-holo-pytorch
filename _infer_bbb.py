@@ -69,8 +69,13 @@ def main():
     ).to(device)
 
     ck = torch.load(args.ckpt_path, map_location="cpu")
-    if "model_state_dict" in ck:
-        r = holonet.load_state_dict(ck["model_state_dict"], strict=False)
+    sd_key = None
+    for k in ("model_state_dict", "holonet_state_dict"):
+        if k in ck:
+            sd_key = k
+            break
+    if sd_key is not None:
+        r = holonet.load_state_dict(ck[sd_key], strict=False)
         print("holonet missing:", len(r.missing_keys), "unexpected:", len(r.unexpected_keys))
         if "ddpm_net_state_dict" in ck:
             r2 = ddpm_net.load_state_dict(ck["ddpm_net_state_dict"], strict=False)
