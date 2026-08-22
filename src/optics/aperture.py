@@ -101,7 +101,9 @@ def filter_phs_only(phs_only: torch.Tensor,
         if propagator is None:
             raise ValueError("propagator required for depth shift")
         tf_wavelength = torch.tensor(wavelength, dtype=cpx_filtered.real.dtype, device=cpx_filtered.device).view(1, -1, 1, 1)
-        cpx_filtered = propagator(cpx_filtered, depth_shift) * compl_exp(-2 * np.pi * depth_shift / tf_wavelength)
+        # Match TensorHolo V2 `tf_filter_phs_only`: after propagating to the
+        # negative depth_shift plane, apply +2*pi*depth_shift/wavelength.
+        cpx_filtered = propagator(cpx_filtered, depth_shift) * compl_exp(2 * np.pi * depth_shift / tf_wavelength)
 
     # ---- 提取振幅和相位 ----
     amp_filtered = torch.abs(cpx_filtered)
