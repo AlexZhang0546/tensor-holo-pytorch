@@ -30,6 +30,51 @@ def _patched_depth_to_space(x, block_size, data_format="NHWC"):
 
 
 tf.compat.v1.depth_to_space = _patched_depth_to_space
+tf.depth_to_space = _patched_depth_to_space
+
+
+_tf_nn_conv2d = tf.nn.conv2d
+_tf_nn_bias_add = tf.nn.bias_add
+_tf_nn_depthwise_conv2d = tf.nn.depthwise_conv2d
+
+
+def _nhwc_strides(strides):
+    # NCHW [1,1,h,w] -> NHWC [1,h,w,1]
+    return [strides[0], strides[2], strides[3], strides[1]]
+
+
+def _conv2d_cpu(input, filter, strides, padding, data_format="NHWC", **kwargs):
+    if data_format == "NCHW":
+        x = tf.transpose(input, [0, 2, 3, 1])
+        y = _tf_nn_conv2d(x, filter, _nhwc_strides(strides), padding,
+                          data_format="NHWC", **kwargs)
+        return tf.transpose(y, [0, 3, 1, 2])
+    return _tf_nn_conv2d(input, filter, strides, padding,
+                         data_format=data_format, **kwargs)
+
+
+def _bias_add_cpu(value, bias, data_format="NHWC", **kwargs):
+    if data_format == "NCHW":
+        x = tf.transpose(value, [0, 2, 3, 1])
+        y = _tf_nn_bias_add(x, bias, data_format="NHWC", **kwargs)
+        return tf.transpose(y, [0, 3, 1, 2])
+    return _tf_nn_bias_add(value, bias, data_format=data_format, **kwargs)
+
+
+def _depthwise_conv2d_cpu(input, filter, strides, padding, data_format="NHWC",
+                          **kwargs):
+    if data_format == "NCHW":
+        x = tf.transpose(input, [0, 2, 3, 1])
+        y = _tf_nn_depthwise_conv2d(x, filter, _nhwc_strides(strides), padding,
+                                    data_format="NHWC", **kwargs)
+        return tf.transpose(y, [0, 3, 1, 2])
+    return _tf_nn_depthwise_conv2d(input, filter, strides, padding,
+                                   data_format=data_format, **kwargs)
+
+
+tf.nn.conv2d = _conv2d_cpu
+tf.nn.bias_add = _bias_add_cpu
+tf.nn.depthwise_conv2d = _depthwise_conv2d_cpu
 
 if __name__ == "__main__":
     # argparse in main_v2.py sees sys.argv[1:]; keep script name as argv[0].
