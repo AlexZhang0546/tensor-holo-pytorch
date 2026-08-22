@@ -75,6 +75,41 @@ def main():
         "original_amp_filtered",
         os.path.join(original_dir, "output_original_bbb", "amp_filtered.png"),
         target))
+    orig_recon = cv2.imread(
+        os.path.join(original_dir, "output_original_bbb", "amp_filtered.png"),
+        cv2.IMREAD_COLOR)
+    target_for_orig = cv2.imread(target, cv2.IMREAD_COLOR)
+    target_for_orig = cv2.resize(
+        target_for_orig, (orig_recon.shape[1], orig_recon.shape[0]),
+        interpolation=cv2.INTER_CUBIC)
+    rows.append({
+        "name": "original_amp_filtered_flip_v",
+        "ssim_rgb": ssim(orig_recon[::-1], target_for_orig),
+        "psnr_rgb": psnr(orig_recon[::-1], target_for_orig),
+        "ssim_gray": ssim(grayscale_rgb(orig_recon[::-1]),
+                          grayscale_rgb(target_for_orig)),
+        "psnr_gray": psnr(grayscale_rgb(orig_recon[::-1]),
+                          grayscale_rgb(target_for_orig)),
+        "channel_ssim": [ssim(orig_recon[::-1][:, :, i], target_for_orig[:, :, i])
+                         for i in range(3)],
+        "channel_psnr": [psnr(orig_recon[::-1][:, :, i], target_for_orig[:, :, i])
+                         for i in range(3)],
+    })
+    rows.append({
+        "name": "original_amp_filtered_flip_v_swap",
+        "ssim_rgb": ssim(orig_recon[::-1][:, :, ::-1], target_for_orig),
+        "psnr_rgb": psnr(orig_recon[::-1][:, :, ::-1], target_for_orig),
+        "ssim_gray": ssim(grayscale_rgb(orig_recon[::-1][:, :, ::-1]),
+                          grayscale_rgb(target_for_orig)),
+        "psnr_gray": psnr(grayscale_rgb(orig_recon[::-1][:, :, ::-1]),
+                          grayscale_rgb(target_for_orig)),
+        "channel_ssim": [ssim(orig_recon[::-1][:, :, ::-1][:, :, i],
+                              target_for_orig[:, :, i])
+                         for i in range(3)],
+        "channel_psnr": [psnr(orig_recon[::-1][:, :, ::-1][:, :, i],
+                              target_for_orig[:, :, i])
+                         for i in range(3)],
+    })
     rows.append(compare_one(
         "improved_recon_rgb",
         os.path.join(base, "output_bbb", "recon_rgb.png"),
