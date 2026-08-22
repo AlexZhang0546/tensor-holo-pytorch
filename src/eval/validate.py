@@ -174,8 +174,10 @@ def validate_stage2(holonet, ddpm_net, val_loader, hologram_params, training_par
 
             # 7. 与目标振幅比较
             for i in range(amp_final.size(0)):
-                ssim_val = compute_ssim(amp_final[i], amp_gt_padded[i], data_range=1.414)
-                psnr_val = compute_psnr(amp_final[i], amp_gt_padded[i], data_range=1.414)
+                # Original TensorFlow `tf.image.ssim/psnr` uses data_range=1.0
+                # for both stage-1 and stage-2 amplitude comparisons.
+                ssim_val = compute_ssim(amp_final[i], amp_gt_padded[i], data_range=1.0)
+                psnr_val = compute_psnr(amp_final[i], amp_gt_padded[i], data_range=1.0)
                 ssim_list.append(ssim_val.item())
                 psnr_list.append(psnr_val.item())
 
