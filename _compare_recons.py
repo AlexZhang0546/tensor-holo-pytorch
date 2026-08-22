@@ -71,19 +71,20 @@ def main():
     original_dir = r"C:\Users\zrx07\Documents\program\tensor-holo"
     target = os.path.join(original_dir, "data", "example_input", "bbb_rgb.png")
     rows = []
+    # The ddpm_12 checkpoint must be evaluated with --eval-depth-shift 12.
     rows.append(compare_one(
-        "original_amp_filtered",
-        os.path.join(original_dir, "output_original_bbb", "amp_filtered.png"),
+        "original_ddpm12_amp_filtered",
+        os.path.join(original_dir, "output_original_bbb_d12", "amp_filtered.png"),
         target))
     orig_recon = cv2.imread(
-        os.path.join(original_dir, "output_original_bbb", "amp_filtered.png"),
+        os.path.join(original_dir, "output_original_bbb_d12", "amp_filtered.png"),
         cv2.IMREAD_COLOR)
     target_for_orig = cv2.imread(target, cv2.IMREAD_COLOR)
     target_for_orig = cv2.resize(
         target_for_orig, (orig_recon.shape[1], orig_recon.shape[0]),
         interpolation=cv2.INTER_CUBIC)
     rows.append({
-        "name": "original_amp_filtered_flip_v",
+        "name": "original_ddpm12_amp_filtered_flip_v",
         "ssim_rgb": ssim(orig_recon[::-1], target_for_orig),
         "psnr_rgb": psnr(orig_recon[::-1], target_for_orig),
         "ssim_gray": ssim(grayscale_rgb(orig_recon[::-1]),
@@ -96,7 +97,7 @@ def main():
                          for i in range(3)],
     })
     rows.append({
-        "name": "original_amp_filtered_flip_v_swap",
+        "name": "original_ddpm12_amp_filtered_flip_v_swap",
         "ssim_rgb": ssim(orig_recon[::-1][:, :, ::-1], target_for_orig),
         "psnr_rgb": psnr(orig_recon[::-1][:, :, ::-1], target_for_orig),
         "ssim_gray": ssim(grayscale_rgb(orig_recon[::-1][:, :, ::-1]),
