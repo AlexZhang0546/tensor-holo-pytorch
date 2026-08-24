@@ -25,5 +25,9 @@ def run(cmd, timeout=120):
 
 
 if __name__ == "__main__":
-    cmd = " ".join(sys.argv[1:])
+    if len(sys.argv) >= 3 and sys.argv[1] == "--file":
+        with open(sys.argv[2], "r", encoding="utf-8") as f:
+            cmd = f.read()
+    else:
+        cmd = " ".join(sys.argv[1:])
     run(cmd)
