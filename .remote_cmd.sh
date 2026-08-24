@@ -1,9 +1,3 @@
 cd /root/autodl-tmp/ZhangRuixuan/tensor-holo
-echo "===== ls ====="
-ls -la
-echo "===== eval_official_s2.py ====="
-cat eval_official_s2.py
-echo "===== model dirs ====="
-find model -maxdepth 1 -type d | sort
-echo "===== data dirs ====="
-find data -maxdepth 1 -type d | sort
+echo "===== tf_propagator / _propagate ====="
+grep -n "def tf_propagator\|def _propagate\|double_pad\|tf_compl_exp\|tf_compl_val\|tf_fft2d\|tf_ifft2d" -A 55 optics.py
