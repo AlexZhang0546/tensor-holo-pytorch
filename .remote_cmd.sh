@@ -1,7 +1,11 @@
 cd /root/autodl-tmp/ZhangRuixuan/tensor-holo-pytorch
-echo "===== screen ====="
+screen -S zrx-tensor-holo -X quit
+sleep 3
+echo "===== screen after quit ====="
 screen -ls
-echo "===== tail _finetune_psnr.log ====="
-tail -n 30 _finetune_psnr.log 2>/dev/null || true
-echo "===== tail eval ====="
-tail -n 20 _finetune_psnr_eval.log 2>/dev/null || true
+echo "===== eval fine-tuned epoch120 ckpt ====="
+/root/autodl-tmp/miniconda3/envs/holography/bin/python src/_eval_paper.py \
+  --ckpt-path model/stage2_real_d2t16_psnrfix/stage2_joint_latest.pth \
+  --model-arch unet --unet-depth 2 --unet-base-filters 24 --unet-tail-blocks 16 \
+  --ddpm-arch real --ddpm-bn tf --depth-shift 12.0 --dataset-res 384 --batch 2 \
+  --split validate --stage2
