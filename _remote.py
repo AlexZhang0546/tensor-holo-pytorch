@@ -4,7 +4,7 @@ import paramiko
 HOST = "connect.cqa1.seetacloud.com"
 PORT = 17892
 USER = "root"
-PASSWORD = "TZ66W6ssn/q"
+PASSWORD = "/TZ66W6ssn/q"
 
 
 def run(cmd, timeout=120):
