@@ -132,7 +132,7 @@ stage-2 全管线验证：
 
 ```bash
 python main.py --validate-mode-s2 \
-  --ckpt-path model/stage2_real_d2t16/stage2_joint_latest.pth \
+  --ckpt-path model/stage2_real_d2t16_psnrfix/stage2_joint_latest.pth \
   --activate-ddpm --ddpm-arch real --ddpm-bn tf \
   --model-arch unet --unet-depth 2 --unet-base-filters 24 --unet-tail-blocks 16 \
   --dataset-res 384 --train-depth-shift 12.0
@@ -143,7 +143,7 @@ python main.py --validate-mode-s2 \
 
 ```bash
 python src/_eval_paper.py \
-  --ckpt-path model/stage2_real_d2t16/stage2_joint_latest.pth \
+  --ckpt-path model/stage2_real_d2t16_psnrfix/stage2_joint_latest.pth \
   --model-arch unet --unet-depth 2 --unet-base-filters 24 --unet-tail-blocks 16 \
   --ddpm-arch real --ddpm-bn tf --depth-shift 12.0 \
   --dataset-res 384 --batch 2 --split validate --stage2
@@ -153,20 +153,20 @@ python src/_eval_paper.py \
 
 ```bash
 python main.py --eval-mode \
-  --ckpt-path model/stage2_real_d2t16/stage2_joint_latest.pth \
+  --ckpt-path model/stage2_real_d2t16_psnrfix/stage2_joint_latest.pth \
   --activate-ddpm --ddpm-arch real --ddpm-bn tf \
   --model-arch unet --unet-depth 2 --unet-base-filters 24 --unet-tail-blocks 16 \
   --eval-res-h 1080 --eval-res-w 1920 \
-  --eval-rgb-path data/example_input/bbb_rgb.png \
-  --eval-depth-path data/example_input/bbb_depth.png \
-  --eval-output-path output_bbb --eval-depth-shift 12.0
+  --eval-rgb-path data/example_input/nyu/cafe_1_rgb.png \
+  --eval-depth-path data/example_input/nyu/cafe_1_depth.png \
+  --eval-output-path output_nyu/cafe_1 --eval-depth-shift 12.0
 ```
 
 ### 4.5 导出 ONNX
 
 ```bash
 python main.py --export-mode \
-  --ckpt-path model/stage2_real_d2t16/stage2_joint_latest.pth \
+  --ckpt-path model/stage2_real_d2t16_psnrfix/stage2_joint_latest.pth \
   --activate-ddpm --ddpm-arch real --ddpm-bn tf \
   --model-arch unet --unet-depth 2 --unet-base-filters 24 --unet-tail-blocks 16 \
   --trt-res-h 1080 --trt-res-w 1920 --output inference_graph_v2.onnx
