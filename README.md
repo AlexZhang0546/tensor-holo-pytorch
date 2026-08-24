@@ -287,6 +287,5 @@ data/                       # 数据集
 1. 服务器上的官方原项目 `tensor-holo/main_v2.py` 曾被改成 NHWC，但 amp/phase
    切片仍按 NCHW 写，直接评估会报 `mul_17` 维度错误。评估官方 ckpt 时应使用
    原始的 NCHW 版本（本项目评估时已用干净的官方源码完成）。
-2. 长训练请在服务器 `screen zrx-tensor-holo` 中运行，避免 SSH 断线中断。
-3. 如果要追求更高 PSNR，可把 stage-2 的 `--weight-ssim` 设为 0–5；如果要
+2. 如果要追求更高 PSNR，可把 stage-2 的 `--weight-ssim` 设为 0–5；如果要
    追求更高 SSIM，可适当调大，但会牺牲 PSNR。
