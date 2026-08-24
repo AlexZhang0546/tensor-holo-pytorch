@@ -442,6 +442,7 @@ def _build_eval_namespace(args, cur_dir):
         unet_stem_skip=args.unet_stem_skip,
         unet_refine_blocks=args.unet_refine_blocks,
         unet_global_in=args.unet_global_in,
+        unet_tail_blocks=args.unet_tail_blocks,
     )
 
 

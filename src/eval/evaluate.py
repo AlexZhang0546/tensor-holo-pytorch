@@ -116,6 +116,7 @@ def evaluate(args):
         unet_depth=getattr(args, 'unet_depth', 3),
         unet_base_filters=getattr(args, 'unet_base_filters', 24),
         unet_attention=getattr(args, 'unet_attention', False),
+        unet_tail_blocks=getattr(args, 'unet_tail_blocks', 0),
     ).to(device)
 
     load_model(holonet, args.ckpt_path, device)
@@ -288,6 +289,8 @@ if __name__ == '__main__':
                         help='ComplexUNet base filters (shallowest level)')
     parser.add_argument('--unet-attention', action='store_true',
                         help='Enable bottleneck self-attention in ComplexUNet')
+    parser.add_argument('--unet-tail-blocks', type=int, default=0,
+                        help='ComplexUNet full-resolution HoloNet-style tail blocks')
     parser.add_argument('--eval-res-h', type=int, default=1080)
     parser.add_argument('--eval-res-w', type=int, default=1920)
     parser.add_argument('--eval-rgb-path', type=str, required=True)
