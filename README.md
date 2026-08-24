@@ -172,6 +172,26 @@ python main.py --export-mode \
   --trt-res-h 1080 --trt-res-w 1920 --output inference_graph_v2.onnx
 ```
 
+### 4.6 单张推理效果示例
+
+下面使用公开的 NYU Depth V2 `cafe` 场景样图（RGB 与对齐深度）做端到端推理。
+深度图按单帧 min-max 归一化到 `[0,1]`；RGB 统一裁剪到 16:9 后由模型缩放至
+1920×1080。左列为输入 RGB，右列为 stage-2 输出的 `amp_filtered.png`，即经
+双相位编码与物理孔径滤波后的重建结果。
+
+![cafe 示例 1](assets/compare/cafe_1_compare.jpg)
+
+![cafe 示例 2](assets/compare/cafe_2_compare.jpg)
+
+![cafe 示例 3](assets/compare/cafe_3_compare.jpg)
+
+原始输入样图见 [`assets/samples/`](assets/samples/)，完整输出（重建图与
+RGB 三通道相位图）见 [`assets/results/`](assets/results/)。原始 RGB-D 数据来自
+[NYU Depth Dataset V2](https://cs.nyu.edu/~fergus/datasets/nyu_depth_v2.html)，
+下载链接由
+[rerun RGB-D 示例集](https://github.com/rerun-io/rerun/tree/main/examples/python/rgbd)
+提供。
+
 ## 5. 目录结构
 
 ```text
