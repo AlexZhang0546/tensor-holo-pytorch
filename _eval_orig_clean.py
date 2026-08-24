@@ -116,25 +116,20 @@ def main():
     model.saver.restore(model.sess, ckpt.model_checkpoint_path)
 
     n_steps = validate_dataset_params["sample_count"] // validate_dataset_params["batch"]
-    vals = {k: [] for k in ["ssim_amp", "ssim_img", "psnr_amp", "psnr_img"]}
+    vals = {k: [] for k in ["ssim_amp", "ssim_img", "psnr_amp", "psnr_img", "mean", "std"]}
     t0 = time.time()
     for step in range(n_steps):
-        ra, ri, pa, pi = model.sess.run([ssim_amp_s2, ssim_img_s2, psnr_amp_s2, psnr_img_s2],
-                                        feed_dict={handle: validate_handle})
+        ra, ri, pa, pi, mn, st = model.sess.run(
+            [ssim_amp_s2, ssim_img_s2, psnr_amp_s2, psnr_img_s2, mean_s2, std_s2],
+            feed_dict={handle: validate_handle})
         vals["ssim_amp"].append(ra)
         vals["ssim_img"].append(ri)
         vals["psnr_amp"].append(pa)
         vals["psnr_img"].append(pi)
-        if step % 5 == 0:
-            print("step %d/%d (%.0fs)" % (step, n_steps, time.time() - t0), flush=True)
-    vals["mean"] = []
-    vals["std"] = []
-    for step in range(n_steps):
-        _, _, _, _, mn, st = model.sess.run(
-            [ssim_amp_s2, ssim_img_s2, psnr_amp_s2, psnr_img_s2, mean_s2, std_s2],
-            feed_dict={handle: validate_handle})
         vals["mean"].append(mn)
         vals["std"].append(st)
+        if step % 5 == 0:
+            print("step %d/%d (%.0fs)" % (step, n_steps, time.time() - t0), flush=True)
     for k in ["ssim_amp", "ssim_img", "psnr_amp", "psnr_img", "mean", "std"]:
         print("%s: mean %.4f  std %.4f  max %.4f  min %.4f" % (
             k, np.mean(vals[k]), np.std(vals[k]), np.max(vals[k]), np.min(vals[k])), flush=True)
