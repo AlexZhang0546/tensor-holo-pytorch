@@ -185,8 +185,8 @@ python main.py --export-mode \
 
 ![cafe 示例 3](assets/compare/cafe_3_compare.jpg)
 
-原始输入样图见 [`assets/samples/`](assets/samples/)，完整输出（重建图与
-RGB 三通道相位图）见 [`assets/results/`](assets/results/)。原始 RGB-D 数据来自
+原始输入样图见 [`assets/samples/`](assets/samples/)，重建图见
+[`assets/results/`](assets/results/)。原始 RGB-D 数据来自
 [NYU Depth Dataset V2](https://cs.nyu.edu/~fergus/datasets/nyu_depth_v2.html)，
 下载链接由
 [rerun RGB-D 示例集](https://github.com/rerun-io/rerun/tree/main/examples/python/rgbd)
