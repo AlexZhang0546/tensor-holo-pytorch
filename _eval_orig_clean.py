@@ -127,7 +127,15 @@ def main():
         vals["psnr_img"].append(pi)
         if step % 5 == 0:
             print("step %d/%d (%.0fs)" % (step, n_steps, time.time() - t0), flush=True)
-    for k in ["ssim_amp", "ssim_img", "psnr_amp", "psnr_img"]:
+    vals["mean"] = []
+    vals["std"] = []
+    for step in range(n_steps):
+        _, _, _, _, mn, st = model.sess.run(
+            [ssim_amp_s2, ssim_img_s2, psnr_amp_s2, psnr_img_s2, mean_s2, std_s2],
+            feed_dict={handle: validate_handle})
+        vals["mean"].append(mn)
+        vals["std"].append(st)
+    for k in ["ssim_amp", "ssim_img", "psnr_amp", "psnr_img", "mean", "std"]:
         print("%s: mean %.4f  std %.4f  max %.4f  min %.4f" % (
             k, np.mean(vals[k]), np.std(vals[k]), np.max(vals[k]), np.min(vals[k])), flush=True)
     print("DONE", flush=True)
