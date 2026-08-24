@@ -38,7 +38,7 @@ def compute_ddpm_phase_loss(
         phs_cropped = phs_out_shifted
 
     # 空间维度（H, W）的标准差，然后对通道和 batch 取均值
-    std_per_channel = phs_cropped.std(dim=(2, 3))          # (B, C)
+    std_per_channel = phs_cropped.std(dim=(2, 3), unbiased=False)  # TF reduce_std uses population std
     std_loss = std_per_channel.mean()
 
     # 空间均值偏移量（减去 0.5 后取绝对值），再对通道和 batch 取均值
