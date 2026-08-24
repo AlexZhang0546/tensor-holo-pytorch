@@ -294,6 +294,10 @@ assets/                     # README 样图、推理结果与对比图
 | 本 UNet d2t16（`weight_ssim=30`，修复前） | **0.7996** | 25.27 dB | **0.7999** | 25.35 dB |
 | 本 UNet d2t16（平衡微调后） | 0.7977 | **25.60 dB** | 0.7971 | **25.69 dB** |
 
+平衡微调后的检查点路径为
+`model/stage2_real_d2t16_psnrfix/stage2_joint_latest.pth`，也是本文档第 4 节
+推理/验证/导出所使用的检查点。
+
 解释：
 
 - 改进版的 **SSIM 高于官方**，说明结构语义更接近目标；`weight_ssim=30` 时
