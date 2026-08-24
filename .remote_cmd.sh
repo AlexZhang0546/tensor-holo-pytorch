@@ -1,3 +1,9 @@
-cd /root/autodl-tmp/ZhangRuixuan/tensor-holo
-echo "===== tf_propagator / _propagate ====="
-grep -n "def tf_propagator\|def _propagate\|double_pad\|tf_compl_exp\|tf_compl_val\|tf_fft2d\|tf_ifft2d" -A 55 optics.py
+echo "===== screen -ls ====="
+screen -ls
+echo "===== holography python ====="
+/root/autodl-tmp/miniconda3/envs/holography/bin/python -V
+/root/autodl-tmp/miniconda3/envs/holography/bin/python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())"
+echo "===== zrxenv python ====="
+/root/autodl-tmp/miniconda3/envs/zrxenv/bin/python -V
+echo "===== zrxenv_tf2 python ====="
+/root/autodl-tmp/miniconda3/envs/zrxenv_tf2/bin/python -V
