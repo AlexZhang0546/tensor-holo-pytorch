@@ -25,4 +25,5 @@ def run(cmd, timeout=120):
 
 
 if __name__ == "__main__":
-    run(sys.argv[1], timeout=int(sys.argv[2]) if len(sys.argv) > 2 else 120)
+    cmd = " ".join(sys.argv[1:])
+    run(cmd)
