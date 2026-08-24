@@ -1,2 +1,7 @@
 cd /root/autodl-tmp/ZhangRuixuan/tensor-holo-pytorch
-/root/autodl-tmp/miniconda3/envs/holography/bin/python -c "import torch; ck=torch.load('model/stage2_real_d2t16/stage2_joint_latest.pth', map_location='cpu'); print('epoch', ck.get('epoch'), 'global_step', ck.get('global_step')); print('keys', list(ck.keys()))"
+echo "===== screen ====="
+screen -ls
+echo "===== tail _finetune_psnr.log ====="
+tail -n 30 _finetune_psnr.log 2>/dev/null || true
+echo "===== tail eval ====="
+tail -n 20 _finetune_psnr_eval.log 2>/dev/null || true
