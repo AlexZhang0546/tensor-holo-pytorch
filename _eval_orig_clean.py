@@ -12,6 +12,7 @@ CKPT = "/root/autodl-tmp/ZhangRuixuan/tensor-holo-pytorch/ckpt_official_ddpm12"
 sys.path.insert(0, TF_DIR)
 import optics
 import tfrecord
+import main_v2 as main_v2_mod
 from main_v2 import TensorHolographyModel
 
 
@@ -86,6 +87,9 @@ def main():
         train_dataset_params=train_dataset_params,
         test_dataset_params=test_dataset_params,
         validate_dataset_params=validate_dataset_params)
+    # The original `_get_loss` references a bare `hologram_params` local that is
+    # never assigned in the method body; bind it at module scope for evaluation.
+    main_v2_mod.hologram_params = hologram_params
 
     (_, _, validate_handle, handle, rgbd, holo_in, amp_in, phs_in,
      holo_out, amp_out, phs_out) = model._setup_train()
