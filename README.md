@@ -206,6 +206,7 @@ src/
   utils/                    # 指标、初始化
 model/                      # checkpoint（服务器上）
 data/                       # 数据集
+assets/                     # README 样图、推理结果与对比图
 ```
 
 ## 6. 与原项目（TensorHolo V2）的全面对比
